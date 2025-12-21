@@ -406,8 +406,27 @@ EOF
 chmod +x "$LAUNCH_SCRIPT"
 echo "✓ Launch script created: $LAUNCH_SCRIPT"
 echo
-echo "    • launch-sah.sh"
-echo "    • close-sah.sh"
+
+# Install custom icon
+echo "Installing application icon..."
+ICON_NAME="scum-admin-helper"
+ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
+mkdir -p "$ICON_DIR"
+
+# Copy icon from assets directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+SOURCE_ICON="$PROJECT_ROOT/assets/sah-linux-helper-icon.png"
+
+if [ -f "$SOURCE_ICON" ]; then
+    cp "$SOURCE_ICON" "$ICON_DIR/$ICON_NAME.png"
+    echo "✓ Custom icon installed: $ICON_DIR/$ICON_NAME.png"
+    ICON_TO_USE="$ICON_NAME"
+else
+    echo "  Custom icon not found, using fallback"
+    echo "  (Icon will be available when using git clone method)"
+    ICON_TO_USE="application-x-executable"
+fi
 echo
 
 # Create desktop shortcut
@@ -418,16 +437,20 @@ mkdir -p "$HOME/.local/share/applications"
 cat > "$DESKTOP_FILE" << EOF
 [Desktop Entry]
 Name=SCUM Admin Helper
-Comment=Server administration tool for SCUM
+Comment=Server administration tool for SCUM (via Linux helper)
 Exec=$LAUNCH_SCRIPT
-Icon=utilities-terminal
+Icon=$ICON_TO_USE
 Terminal=false
 Type=Application
 Categories=Game;Utility;
+Keywords=scum;admin;server;helper;sah;
+StartupNotify=true
 EOF
 
 echo "✓ Desktop shortcut created"
+echo "  File: $DESKTOP_FILE"
 echo "  Points to: $LAUNCH_SCRIPT"
+echo "  Icon: $ICON_TO_USE"
 echo
 
 # Test SAH can launch

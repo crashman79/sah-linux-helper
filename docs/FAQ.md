@@ -62,7 +62,7 @@ No. SAH installs into SCUM's Proton prefix (the Windows environment) but doesn't
 Three methods:
 1. **Application Menu** (easiest): Search "SCUM Admin Helper"
 2. **Direct**: Run `/path/to/SCUM/launch-sah.sh`
-3. **GUI**: `./scripts/sah-gui.sh` → Manual Control → Launch SAH
+3. **GUI**: `./scripts/sah-helper.sh` → Manual Control → Launch SAH
 
 ### Do I need to launch SAH every time I play SCUM?
 
@@ -88,7 +88,7 @@ SAH uses SCUM's Proton prefix (App ID 513710). Steam sees Wine/Proton activity a
 pkill -f "SCUM Admin Helper.exe"
 
 # Method 3: Via GUI
-./scripts/sah-gui.sh  # → Manual Control → Stop SAH
+./scripts/sah-helper.sh  # → Manual Control → Stop SAH
 
 # Method 4: Force kill
 ./scripts/kill-sah.sh
@@ -159,7 +159,7 @@ Each backup is timestamped for easy identification.
 
 **Via GUI:**
 ```bash
-./scripts/sah-gui.sh
+./scripts/sah-helper.sh
 # → Backup Management → Restore Backup
 ```
 
@@ -193,7 +193,7 @@ find ~/.steam -path "*/Microsoft.NET/Framework/v4.0.30319"
 cat /tmp/sah-launch.log
 
 # 5. Use GUI diagnostic
-./scripts/sah-gui.sh  # → Status
+./scripts/sah-helper.sh  # → Status
 ```
 
 ### Installation fails. What do I do?
@@ -219,7 +219,7 @@ cat /tmp/sah-install*.log
 ### Where can I get help?
 
 1. **Check documentation**: [troubleshooting.md](troubleshooting.md)
-2. **Use GUI**: `./scripts/sah-gui.sh` → Troubleshooting
+2. **Use GUI**: `./scripts/sah-helper.sh` → Troubleshooting
 3. **Check logs**: `/tmp/sah-*.log`
 4. **GitHub Issues**: Report bugs with logs
 5. **Community**: SCUM forums and Discord

@@ -21,12 +21,12 @@
 
 ## 🚀 Quick Start
 
-### Option 1: Clone Repository (Recommended)
+### Option 1: Clone Repository
 
 ```bash
 git clone https://github.com/crashman79/sah-linux-helper.git
 cd sah-linux-helper
-./scripts/sah-gui.sh  # GUI installer
+./scripts/sah-helper.sh  # GUI installer
 # or
 ./scripts/install-sah.sh  # CLI installer
 ```
@@ -35,9 +35,9 @@ cd sah-linux-helper
 
 ```bash
 # Download and run GUI
-wget https://raw.githubusercontent.com/crashman79/sah-linux-helper/main/scripts/sah-gui.sh
-chmod +x sah-gui.sh
-./sah-gui.sh
+wget https://raw.githubusercontent.com/crashman79/sah-linux-helper/main/scripts/sah-helper.sh
+chmod +x sah-helper.sh
+./sah-helper.sh
 
 # Or download CLI installer
 wget https://raw.githubusercontent.com/crashman79/sah-linux-helper/main/scripts/install-sah.sh
@@ -51,8 +51,8 @@ chmod +x install-sah.sh
 
 ```bash
 cd /path/to/sah-scripts
-chmod +x scripts/sah-gui.sh
-./scripts/sah-gui.sh
+chmod +x scripts/sah-helper.sh
+./scripts/sah-helper.sh
 ```
 
 The GUI provides:
@@ -78,7 +78,21 @@ chmod +x scripts/install-sah.sh
 /path/to/SteamLibrary/steamapps/common/SCUM/launch-sah.sh
 ```
 
-## 📋 Prerequisites
+## � How It Works
+
+The installer:
+1. Downloads SAH from official source (~110MB)
+2. Installs SAH into SCUM's Proton prefix (shared .NET environment)
+3. Creates `launch-sah.sh` in your SCUM game directory
+4. Creates desktop shortcut pointing to the launch script
+5. Desktop shortcut appears in application menu
+
+**File Locations:**
+- **SAH Application**: `~/.steam/.../compatdata/513710/pfx/drive_c/.../SCUM_Admin_Helper/`
+- **Launch Script**: `/SteamLibrary/steamapps/common/SCUM/launch-sah.sh`
+- **Desktop Shortcut**: `~/.local/share/applications/scum-admin-helper.desktop`
+
+## �📋 Prerequisites
 
 **Required:**
 - Linux (any distro: Ubuntu, Fedora, Arch, etc.)
@@ -114,7 +128,7 @@ pip install protontricks
 ```
 sah-scripts/
 ├── scripts/
-│   ├── sah-gui.sh          # Main GUI application ⭐
+│   ├── sah-helper.sh          # Main GUI application ⭐
 │   ├── install-sah.sh      # Automated installer
 │   ├── backup-sah.sh       # Backup utility
 │   ├── restore-sah.sh      # Restore utility

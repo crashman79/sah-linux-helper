@@ -2,10 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1] - 2024-12-21
+
+### Added
+- **Custom Application Icon**: SAH logo with "LINUX" badge overlay
+  - Downloaded official SAH logo and created modified version
+  - Blue "LINUX" badge in bottom-left corner indicates unofficial Linux helper
+  - Icon automatically installed to `~/.local/share/icons/` during setup
+  - Falls back to generic icon if using direct download method
+  - Assets stored in `assets/` directory with proper attribution
+- **"What Gets Installed" Section**: Clear documentation of installation locations
+  - SAH application location in Proton prefix
+  - Launch script location in SCUM directory
+  - Desktop shortcut location
+  - Dependencies location
+- **"How It Works" Section**: Workflow explanation added to README
+
+### Changed
+- **Main GUI Script Renamed**: `sah-gui.sh` → `sah-helper.sh` for clarity
+  - Avoids confusion with SAH application itself
+  - Other scripts remain `*-sah.sh` as they directly operate on SAH
+- **Desktop File**: Updated description to mention "Linux helper" for clarity
+- **Icon Attribution**: Added documentation crediting SAH developers
+- **Installer**: Enhanced to copy custom icon from assets directory when available
+- **Documentation**: Improved clarity about file locations and installation process
+- **Steam Deck Support**: Removed (not feasible to support without testing hardware)
+
+### Fixed
+- Desktop shortcut now uses custom branded icon instead of generic terminal icon
+- Installation guide clearly explains what gets created and where
+
 ## [1.0.0] - 2024-12-21
 
 ### Added
-- **GUI Application** (`sah-gui.sh`) - Full-featured graphical interface
+- **GUI Application** (`sah-helper.sh`) - Full-featured graphical interface
   - Installation wizard with progress tracking
   - Desktop shortcut information and management
   - Test launch functionality

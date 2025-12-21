@@ -6,7 +6,7 @@ Solutions to common problems with SCUM Admin Helper on Linux.
 
 **Use the GUI for fastest diagnosis:**
 ```bash
-./scripts/sah-gui.sh
+./scripts/sah-helper.sh
 # Click "Status" or "Troubleshooting"
 ```
 
@@ -186,7 +186,7 @@ pkill -9 -f "SCUM Admin Helper.exe"
 
 **Via GUI:**
 ```bash
-./scripts/sah-gui.sh
+./scripts/sah-helper.sh
 # → Manual Control → Stop SAH
 ```
 
@@ -230,7 +230,7 @@ pkill -f "SCUM Admin Helper.exe"
 
 **Option 3: Use GUI control**
 ```bash
-./scripts/sah-gui.sh
+./scripts/sah-helper.sh
 # → Manual Control → Stop SAH
 ```
 
@@ -396,7 +396,7 @@ chmod +x ~/.local/share/applications/scum-admin-helper.desktop
 ### 11. GUI Won't Start
 
 **Symptoms:**
-- `./scripts/sah-gui.sh` shows error
+- `./scripts/sah-helper.sh` shows error
 - "zenity is required"
 - GUI appears then immediately closes
 
@@ -417,7 +417,7 @@ sudo pacman -S zenity
 **Run GUI from terminal to see errors:**
 ```bash
 cd /path/to/sah-scripts
-./scripts/sah-gui.sh 2>&1 | tee gui-debug.log
+./scripts/sah-helper.sh 2>&1 | tee gui-debug.log
 ```
 
 **Check for X11/Wayland display:**
@@ -457,7 +457,7 @@ ls ~/sah-backups/backup-YYYYMMDD-HHMMSS/SCUM_Admin_Helper/
 bash -x ./scripts/install-sah.sh 2>&1 | tee install-debug.log
 
 # Run GUI with debug
-bash -x ./scripts/sah-gui.sh 2>&1 | tee gui-debug.log
+bash -x ./scripts/sah-helper.sh 2>&1 | tee gui-debug.log
 ```
 
 ### Check Proton Version
@@ -520,7 +520,7 @@ ps aux | grep -E "(SCUM|SAH)"
 ## Still Having Issues?
 
 1. **Check logs**: `/tmp/sah-*.log` files contain detailed error information
-2. **Use GUI troubleshooting**: `./scripts/sah-gui.sh` → Troubleshooting
+2. **Use GUI troubleshooting**: `./scripts/sah-helper.sh` → Troubleshooting
 3. **Read documentation**: [installation.md](installation.md) for setup help
 4. **GitHub Issues**: Report bugs with diagnostic information above
 5. **Community Forums**: Ask in SCUM community channels

@@ -12,8 +12,8 @@ git clone https://github.com/crashman79/sah-linux-helper.git
 cd sah-linux-helper
 
 # Or download directly
-wget https://raw.githubusercontent.com/crashman79/sah-linux-helper/main/scripts/sah-gui.sh
-chmod +x sah-gui.sh
+wget https://raw.githubusercontent.com/crashman79/sah-linux-helper/main/scripts/sah-helper.sh
+chmod +x sah-helper.sh
 
 # Install dependencies (choose your distro)
 sudo apt install python3-pip zenity curl unzip && pip3 install protontricks  # Ubuntu/Debian
@@ -24,7 +24,7 @@ sudo pacman -S python-pip zenity curl unzip && pip install protontricks      # A
 # Launch SCUM from Steam → Exit
 
 # Run installer
-./scripts/sah-gui.sh  # GUI (recommended)
+./scripts/sah-helper.sh  # GUI (recommended)
 # OR
 ./scripts/install-sah.sh  # Command line
 ```
@@ -48,7 +48,7 @@ pkill -f "SCUM Admin Helper.exe"
 
 ```bash
 # Open GUI
-./scripts/sah-gui.sh
+./scripts/sah-helper.sh
 
 # GUI Menu Options:
 # - Install: Run installation wizard
@@ -195,19 +195,19 @@ protontricks --version
 
 ```bash
 # Create SAH-only backup (fast, ~100MB)
-./scripts/sah-gui.sh  # → Backup Management → Create Backup → SAH Only
+./scripts/sah-helper.sh  # → Backup Management → Create Backup → SAH Only
 
 # Create full prefix backup (slow, ~2-5GB, includes everything)
-./scripts/sah-gui.sh  # → Backup Management → Create Backup → Full Prefix
+./scripts/sah-helper.sh  # → Backup Management → Create Backup → Full Prefix
 
 # List all backups
-./scripts/sah-gui.sh  # → Backup Management → List Backups
+./scripts/sah-helper.sh  # → Backup Management → List Backups
 
 # Restore from backup
-./scripts/sah-gui.sh  # → Backup Management → Restore Backup → Select backup
+./scripts/sah-helper.sh  # → Backup Management → Restore Backup → Select backup
 
 # Delete old backups
-./scripts/sah-gui.sh  # → Backup Management → Delete Backups → Select backups
+./scripts/sah-helper.sh  # → Backup Management → Delete Backups → Select backups
 
 # Manual backup location
 ls -lh ~/sah-backups/
@@ -253,7 +253,7 @@ cat docs/troubleshooting.md
 cat docs/FAQ.md
 
 # GUI help
-./scripts/sah-gui.sh  # → Troubleshooting
+./scripts/sah-helper.sh  # → Troubleshooting
 
 # Check logs
 ls -lt /tmp/sah*.log | head -5

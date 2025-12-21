@@ -37,3 +37,7 @@ SAH_Setup.zip
 # Test files
 test/
 debug.log
+
+# Assets - keep the custom icon
+!assets/sah-linux-helper-icon.png
+!assets/sah-original-logo.png

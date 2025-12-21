@@ -126,7 +126,7 @@ If applicable, add screenshots showing:
 ## Additional Context
 
 ### Installation Method
-- [ ] GUI installer (sah-gui.sh)
+- [ ] GUI installer (sah-helper.sh)
 - [ ] CLI installer (install-sah.sh)
 - [ ] Manual installation
 

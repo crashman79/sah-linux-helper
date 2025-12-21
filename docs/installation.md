@@ -2,6 +2,28 @@
 
 Complete step-by-step guide to installing SCUM Admin Helper on Linux.
 
+## What Gets Installed
+
+The installer creates:
+
+1. **SAH Application** (in SCUM's Proton prefix):
+   - Location: `~/.steam/.../compatdata/513710/pfx/drive_c/users/steamuser/AppData/Local/SCUM_Admin_Helper/`
+   - Contains: `SCUM Admin Helper.exe` and all required files
+
+2. **Launch Script** (in SCUM game directory):
+   - Location: `/path/to/SteamLibrary/steamapps/common/SCUM/launch-sah.sh`
+   - Self-contained launcher that uses protontricks
+
+3. **Desktop Shortcut** (in your application menu):
+   - Location: `~/.local/share/applications/scum-admin-helper.desktop`
+   - Points to the launch script above
+   - Appears when you search for "SCUM Admin Helper"
+
+4. **Dependencies** (if not already present):
+   - .NET Framework 4.0 and 4.8
+   - Visual C++ 2019 Runtime
+   - All installed into SCUM's Proton prefix
+
 ## System Requirements
 
 - **OS**: Any Linux distribution (Ubuntu, Fedora, Arch, CachyOS, etc.)
@@ -20,14 +42,14 @@ The GUI provides a guided installation with progress tracking and error handling
 ```bash
 git clone https://github.com/crashman79/sah-linux-helper.git
 cd sah-linux-helper
-./scripts/sah-gui.sh
+./scripts/sah-helper.sh
 ```
 
 **Option B: Direct Download**
 ```bash
-wget https://raw.githubusercontent.com/crashman79/sah-linux-helper/main/scripts/sah-gui.sh
-chmod +x sah-gui.sh
-./sah-gui.sh
+wget https://raw.githubusercontent.com/crashman79/sah-linux-helper/main/scripts/sah-helper.sh
+chmod +x sah-helper.sh
+./sah-helper.sh
 ```
 
 **Steps:**
@@ -117,8 +139,8 @@ This creates the Proton prefix at:
 
 ```bash
 cd /path/to/sah-scripts
-chmod +x scripts/sah-gui.sh
-./scripts/sah-gui.sh
+chmod +x scripts/sah-helper.sh
+./scripts/sah-helper.sh
 ```
 
 1. Click **"Install"** from main menu
@@ -157,7 +179,7 @@ Follow the prompts. The installer is interactive and will guide you through each
 ### Verify Installation
 
 **Via GUI:**
-1. Open GUI: `./scripts/sah-gui.sh`
+1. Open GUI: `./scripts/sah-helper.sh`
 2. Click **"Status"**
 3. Check all items show ✓ (green checkmarks)
 
@@ -179,7 +201,7 @@ ls -l ~/.local/share/applications/scum-admin-helper.desktop
 ### Test Launch
 
 **Via GUI:**
-1. Open GUI: `./scripts/sah-gui.sh`
+1. Open GUI: `./scripts/sah-helper.sh`
 2. Click **"Test Launch"**
 3. SAH should start in a few seconds
 4. Close SAH when done testing
@@ -226,7 +248,7 @@ Before using SAH with your server, create a backup:
 ```
 
 **Method 3: Via GUI**
-1. Open GUI: `./scripts/sah-gui.sh`
+1. Open GUI: `./scripts/sah-helper.sh`
 2. Click **"Manual Control"** → **"Launch SAH"**
 
 ### Normal Workflow
@@ -247,7 +269,7 @@ pkill -f "SCUM Admin Helper.exe"
 pkill -9 -f "SCUM Admin Helper.exe"
 
 # Or use GUI
-./scripts/sah-gui.sh  # → Manual Control → Stop SAH
+./scripts/sah-helper.sh  # → Manual Control → Stop SAH
 
 # Or use kill script
 ./scripts/kill-sah.sh

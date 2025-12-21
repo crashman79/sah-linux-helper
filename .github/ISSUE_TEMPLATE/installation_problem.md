@@ -77,7 +77,7 @@ protontricks -l 2>&1 | grep -i scum
 # Paste the commands you ran:
 ./scripts/install-sah.sh
 # or
-./scripts/sah-gui.sh
+./scripts/sah-helper.sh
 ```
 
 ### Installation Logs

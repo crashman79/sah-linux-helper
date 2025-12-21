@@ -121,7 +121,7 @@ If possible, test on multiple distros:
 ```
 sah-scripts/
 ├── scripts/          # Main scripts
-│   ├── sah-gui.sh   # GUI (primary interface)
+│   ├── sah-helper.sh   # GUI (primary interface)
 │   ├── install-sah.sh  # Installer
 │   └── *.sh         # Utility scripts
 ├── docs/            # Documentation
