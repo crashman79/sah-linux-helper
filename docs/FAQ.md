@@ -224,6 +224,61 @@ cat /tmp/sah-install*.log
 4. **GitHub Issues**: Report bugs with logs
 5. **Community**: SCUM forums and Discord
 
+## SCUM Video Management
+
+### What does "Remove SCUM Videos" do?
+
+This optional feature removes SCUM's intro cinematics to speed up game startup and save disk space:
+- **Intro Cinematic** (~289MB)
+- **Character Creation Cinematic** (~650MB)
+- **Splash Videos** (~1.4MB)
+- **Total space saved**: ~940MB
+
+### How do I remove SCUM intro videos?
+
+**Via GUI:**
+```bash
+./scripts/sah-helper.sh
+# → Remove SCUM Videos
+# → Confirm removal
+```
+
+The videos are removed from: `SCUM/SCUM/Content/Movies/`
+
+### How do I restore the intro videos?
+
+If you want the videos back (to watch cinematics or after accidental removal), use Steam's file verification:
+
+**Method 1 - Via Steam GUI:**
+1. Open Steam
+2. Right-click **SCUM** in your Library
+3. Select **Properties**
+4. Go to **Installed Files** tab
+5. Click **Verify integrity of game files**
+6. Wait for Steam to redownload missing files (~940MB)
+
+**Method 2 - Via Steam URL:**
+```bash
+xdg-open "steam://validate/513710"
+```
+
+This opens Steam's verification dialog automatically.
+
+**Note:** Verification is harmless - it only redownloads missing/modified files, not the entire game.
+
+### Will removing videos affect gameplay?
+
+No. Only intro cinematics are removed. These play:
+- When first launching SCUM (intro video)
+- During character creation (character creation cinematic)
+- At startup (splash screens)
+
+All gameplay, multiplayer, and server functionality remain unaffected. You'll just skip straight to the menu.
+
+### Will Steam re-download the videos automatically?
+
+Only if you verify game files (see above). Normal game updates won't restore them unless the video files themselves are updated by the developers.
+
 ## Performance Questions
 
 ### Does SAH affect game performance?

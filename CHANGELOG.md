@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2] - 2024-12-21
+
+### Added
+- **SCUM Video Removal Feature**: Optional utility to remove intro videos
+  - New "Remove SCUM Videos" option in GUI (separated from main features)
+  - New `remove-scum-videos.sh` shell script (pure bash implementation)
+  - Removes intro cinematics (~289MB), character creation (~650MB), splash screens (~1.4MB)
+  - Total space saved: ~940MB
+  - Automatically finds SCUM installation across multiple Steam library locations
+  - Runs in terminal window with formatted progress output
+  - Supports multiple terminal emulators (gnome-terminal, konsole, xterm)
+- **FAQ Section**: SCUM Video Management documentation
+  - What the feature does and file sizes
+  - How to remove videos via GUI
+  - How to restore videos using Steam's "Verify integrity of game files"
+  - Both GUI and command-line restoration methods documented
+  - Explains impact on gameplay (none) and auto-redownload behavior
+
+### Changed
+- **GUI Window Height**: Increased from 450px to 500px to accommodate new option
+- **Menu Layout**: Added visual separator (blank row) before "Remove SCUM Videos" to distinguish it as optional utility
+- **Video Removal Script**: Pure shell script implementation (no Python dependency)
+  - Searches for SCUM in multiple Steam library locations
+  - Clear formatted output with visual separators
+  - Includes restoration instructions in output
+
+### Technical Notes
+- Video removal is a convenience feature unrelated to SAH functionality
+- Script uses standard bash utilities (no external dependencies)
+- Videos can be restored anytime using Steam: `xdg-open "steam://validate/513710"`
+
 ## [1.0.1] - 2024-12-21
 
 ### Added

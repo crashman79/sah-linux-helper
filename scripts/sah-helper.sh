@@ -765,6 +765,65 @@ delete_backups() {
     log "Deleted $deleted backups"
 }
 
+# Function to remove SCUM intro videos
+remove_scum_videos() {
+    log "User selected: Remove SCUM Videos"
+    
+    local video_script="$SCRIPT_DIR/remove-scum-videos.sh"
+    
+    if [ ! -f "$video_script" ]; then
+        show_error "Video removal script not found at:\n$video_script"
+        log "ERROR: Script not found: $video_script"
+        return 1
+    fi
+    
+    # Show confirmation dialog
+    if zenity --question --title="Remove SCUM Intro Videos" --width=450 \
+        --text="<b>Remove SCUM Intro Videos</b>
+
+This will delete intro cinematics from SCUM:
+• Intro Cinematic (~289MB)
+• Character Creation Cinematic (~650MB)  
+• Splash Videos (~1.4MB)
+
+<b>Total space saved: ~940MB</b>
+
+The videos will be removed from:
+SCUM/SCUM/Content/Movies/
+
+<b>Note:</b> Steam may re-download these when verifying game files.
+
+Remove intro videos?" 2>/dev/null; then
+        
+        log "Launching video removal script in terminal..."
+        
+        # Run the script in a terminal
+        if command -v gnome-terminal &> /dev/null; then
+            gnome-terminal -- bash -c "'$video_script'; echo ''; echo 'Press Enter to close...'; read" 2>/dev/null
+        elif command -v konsole &> /dev/null; then
+            konsole -e bash -c "'$video_script'; echo ''; echo 'Press Enter to close...'; read" 2>/dev/null
+        elif command -v xterm &> /dev/null; then
+            xterm -e bash -c "'$video_script'; echo ''; echo 'Press Enter to close...'; read" 2>/dev/null
+        else
+            # Fallback: run in background and show completion
+            show_working "Removing" "Removing SCUM intro videos..."
+            bash "$video_script" &> /tmp/scum-video-removal.log
+            local result=$?
+            close_working
+            
+            if [ $result -eq 0 ]; then
+                show_info "✓ SCUM intro videos removed!\n\nCheck /tmp/scum-video-removal.log for details."
+            else
+                show_error "✗ Failed to remove videos.\n\nCheck /tmp/scum-video-removal.log for details."
+            fi
+        fi
+        
+        log "Executed SCUM video removal script"
+    else
+        log "User cancelled video removal"
+    fi
+}
+
 # Function to show troubleshooting guide
 show_troubleshooting() {
     log "User selected: Troubleshooting"
@@ -830,7 +889,7 @@ main_menu() {
         fi
         
         local choice=$(zenity --list --title="SCUM Admin Helper Manager" \
-            --width=500 --height=450 \
+            --width=500 --height=500 \
             --text="<b>Status:</b> $status_summary$backup_status\n\nSelect an action:" \
             --column="Action" --column="Description" \
             "Install" "Run full installation wizard" \
@@ -841,6 +900,8 @@ main_menu() {
             "Backup Management" "Create/restore/manage backups" \
             "View Logs" "View installation logs" \
             "Troubleshooting" "Common issues and fixes" \
+            "" "" \
+            "Remove SCUM Videos" "Skip intro videos (saves ~940MB)" \
             "Quit" "Exit this program" 2>/dev/null)
         
         case "$choice" in
@@ -871,6 +932,9 @@ main_menu() {
                 ;;
             "Troubleshooting")
                 show_troubleshooting
+                ;;
+            "Remove SCUM Videos")
+                remove_scum_videos
                 ;;
             "Quit"|"")
                 log "User quit GUI"
