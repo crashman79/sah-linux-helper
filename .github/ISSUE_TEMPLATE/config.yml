@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: SCUM Admin Helper Support
+    url: https://scumadminhelper.com
+    about: For issues with SCUM Admin Helper (Windows app) itself, contact the official SAH team
+  - name: SCUM Game Support
+    url: https://store.steampowered.com/app/513710/SCUM/
+    about: For issues with the SCUM game itself, use Steam support or SCUM community forums
+  - name: Discussions
+    url: https://github.com/crashman79/sah-linux-helper/discussions
+    about: Ask questions, share tips, or discuss the project with the community

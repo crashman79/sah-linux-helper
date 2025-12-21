@@ -1,0 +1,39 @@
+# Logs
+*.log
+/tmp/sah-*.log
+
+# Backups
+sah-backups/
+*.bak
+*.backup
+
+# OS-specific
+.DS_Store
+Thumbs.db
+*~
+.directory
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+.temp/
+temp/
+
+# User-specific
+launch-sah.sh
+close-sah.sh
+*.desktop
+
+# Downloaded files (users will download via installer)
+SAH_Setup.zip
+*.exe
+
+# Test files
+test/
+debug.log
