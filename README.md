@@ -380,3 +380,7 @@ These scripts are provided as-is for the SCUM community. SCUM Admin Helper is de
 ## ⚠️ Disclaimer
 
 These scripts are community-created tools and are not officially affiliated with SCUM or Gamepires. Use at your own discretion.
+
+---
+
+<sub>Development assisted by AI tools including GitHub Copilot and Claude.</sub>
