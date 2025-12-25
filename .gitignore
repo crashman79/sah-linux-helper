@@ -7,6 +7,12 @@ sah-backups/
 *.bak
 *.backup
 
+# Archives
+archive/
+
+# Development
+development/
+
 # OS-specific
 .DS_Store
 Thumbs.db
