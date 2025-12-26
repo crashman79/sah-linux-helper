@@ -70,8 +70,8 @@ check_installation_status() {
     local dotnet_installed=0
     local quiet=${1:-0}
     
-    [ $quiet -eq 0 ] && log "Checking installation status..."
-    [ $quiet -eq 0 ] && show_working "Status Check" "Checking installation status..."
+    [ "$quiet" -eq 0 ] && log "Checking installation status..."
+    [ "$quiet" -eq 0 ] && show_working "Status Check" "Checking installation status..."
     
     # Check if SAH is installed - use faster glob search instead of find
     local sah_found=0
@@ -125,7 +125,7 @@ check_installation_status() {
         status="${status}○ SCUM Status: NOT RUNNING\n"
     fi
     
-    [ $quiet -eq 0 ] && close_working
+    [ "$quiet" -eq 0 ] && close_working
     
     echo "$status"
     
@@ -163,12 +163,10 @@ The installer will:
 
 This may take 10-30 minutes.
 
-Continue?" 2>/dev/null
-    
-    if [ $? -ne 0 ]; then
+Continue?" 2>/dev/null || {
         log "User cancelled installation"
         return 1
-    fi
+    }
     
     log "Launching installation script in terminal..."
     # Run installation in terminal - the terminal process blocks until completion
@@ -183,22 +181,162 @@ Continue?" 2>/dev/null
         return 1
     fi
     
-    # Wait a moment for user to close terminal
-    sleep 1
+    # Brief pause then check installation
+    sleep 0.5
     
     # Check if installation succeeded by verifying SAH was installed
     if find ~/.steam ~/.local/share/Steam /mnt -path "*/compatdata/$SCUM_APPID/*/SCUM Admin Helper.exe" 2>/dev/null | head -1 | grep -q .; then
         log "Installation verified successfully"
         show_info "✓ Installation completed!\n\nSCUM Admin Helper is now installed.\n\nYou can launch it from your application menu\nor use the 'Desktop Info' option to learn more."
+        
+        # Offer to remove intro videos to save space
+        offer_video_removal
     else
         log "Installation verification failed"
         show_error "✗ Installation could not be verified.\n\nPlease check the terminal output for errors.\n\nCommon issues:\n• SCUM not launched at least once\n• Missing dependencies\n• Network connection problems"
     fi
 }
 
+# Function to create desktop shortcut
+create_desktop_shortcut() {
+    log "User selected: Create Desktop Shortcut"
+    
+    # Find SAH in SCUM prefix
+    local sah_exe=""
+    local wine_prefix=""
+    for lib in ~/.steam/steam ~/.local/share/Steam /mnt/*/SteamLibrary /mnt/*/*/SteamLibrary; do
+        local test_exe="$lib/steamapps/compatdata/$SCUM_APPID/pfx/drive_c/users/steamuser/AppData/Local/SCUM_Admin_Helper/SCUM Admin Helper.exe"
+        if [ -f "$test_exe" ]; then
+            sah_exe="$test_exe"
+            wine_prefix="$lib/steamapps/compatdata/$SCUM_APPID/pfx"
+            break
+        fi
+    done
+    
+    if [ -z "$sah_exe" ] || [ ! -f "$sah_exe" ]; then
+        show_error "SAH not found in SCUM prefix!\\n\\nPlease run the installation first."
+        return 1
+    fi
+    
+    # Ask user which type of shortcut
+    local shortcut_type
+    shortcut_type=$(zenity --list --title="Desktop Shortcut Type" --width=500 --height=300 \
+        --text="Select shortcut type:\\n" \
+        --column="Type" --column="Description" \
+        "SAH Only" "Launch only SCUM Admin Helper" \
+        "SCUM + SAH" "Launch SCUM and SAH together with watchdog" \
+        "Cancel" "Go back" 2>/dev/null)
+    
+    case "$shortcut_type" in
+        "SAH Only")
+            local desktop_file="$HOME/.local/share/applications/scum-admin-helper.desktop"
+            
+            cat > "$desktop_file" << EOF
+[Desktop Entry]
+Name=SCUM Admin Helper
+Comment=SCUM Server Administration Tool
+Exec=protontricks-launch --appid $SCUM_APPID "$sah_exe"
+Icon=applications-games
+Terminal=false
+Type=Application
+Categories=Game;Utility;
+EOF
+            
+            chmod +x "$desktop_file"
+            log "Created SAH-only desktop shortcut"
+            show_info "✓ Desktop shortcut created!\\n\\nSCUM Admin Helper\\n\\nFind it in your application menu or:\\n$desktop_file"
+            ;;
+            
+        "SCUM + SAH")
+            # Create launcher script
+            local launcher_script="$HOME/.local/bin/launch-scum-with-sah.sh"
+            mkdir -p "$HOME/.local/bin"
+            
+            # Write launcher script with embedded path to sah-env.sh
+            cat > "$launcher_script" << EOFSCRIPT
+#!/bin/bash
+# Launch SCUM and SAH together with watchdog
+
+SCUM_APPID=513710
+SAH_PREFIX=""
+SAH_EXE=""
+SAH_ENV_PATH="$SCRIPT_DIR/sah-env.sh"
+
+# Find SAH
+for lib in ~/.steam/steam ~/.local/share/Steam /mnt/*/SteamLibrary /mnt/*/*/SteamLibrary; do
+    test_exe="\\\$lib/steamapps/compatdata/\\\$SCUM_APPID/pfx/drive_c/users/steamuser/AppData/Local/SCUM_Admin_Helper/SCUM Admin Helper.exe"
+    if [ -f "\\\$test_exe" ]; then
+        SAH_EXE="\\\$test_exe"
+        SAH_PREFIX="\\\$lib/steamapps/compatdata/\\\$SCUM_APPID/pfx"
+        break
+    fi
+done
+
+# Launch SCUM via Steam
+steam steam://rungameid/\\\$SCUM_APPID &
+
+# Wait for SCUM to start
+sleep 10
+while ! pgrep -f "SCUM.exe" > /dev/null 2>&1; do
+    sleep 2
+done
+
+# Launch SAH with Proton (Steam's Wine)
+# Source environment settings
+if [ -f "\\\$SAH_ENV_PATH" ]; then
+    source "\\\$SAH_ENV_PATH"
+fi
+
+protontricks-launch --appid \\\$SCUM_APPID "\\\$SAH_EXE" &
+
+# Wait for SAH to start
+sleep 5
+
+# Monitor SCUM and offer to close SAH when SCUM exits
+while pgrep -f "SCUM.exe" > /dev/null 2>&1; do
+    sleep 5
+done
+
+# SCUM closed, check if SAH is still running
+if pgrep -f "SCUM Admin Helper.exe" > /dev/null 2>&1; then
+    if zenity --question --title="SCUM Admin Helper Watchdog" \\
+        --text="SCUM has closed\\\\n\\\\nSCUM Admin Helper is still running.\\\\nClose it now?" \\
+        --width=400 --timeout=30 2>/dev/null; then
+        pkill -f "SCUM Admin Helper.exe"
+    fi
+fi
+EOFSCRIPT
+EOFSCRIPT
+            
+            chmod +x "$launcher_script"
+            
+            # Create desktop file
+            local desktop_file="$HOME/.local/share/applications/scum-with-sah.desktop"
+            
+            cat > "$desktop_file" << EOF
+[Desktop Entry]
+Name=SCUM + Admin Helper
+Comment=Launch SCUM and SAH together with watchdog
+Exec=$launcher_script
+Icon=applications-games
+Terminal=false
+Type=Application
+Categories=Game;Utility;
+EOF
+            
+            chmod +x "$desktop_file"
+            log "Created SCUM+SAH desktop shortcut with watchdog"
+            show_info "✓ Desktop shortcut created!\\n\\nSCUM + Admin Helper\\n(with automatic watchdog)\\n\\nFind it in your application menu or:\\n$desktop_file\\n\\nLauncher script:\\n$launcher_script"
+            ;;
+    esac
+}
+
 # Function to show desktop shortcut info
 show_desktop_info() {
     log "User selected: Desktop Shortcut Info"
+    
+    # Close any lingering loading indicators
+    close_working 2>/dev/null
     
     local desktop_file="$HOME/.local/share/applications/scum-admin-helper.desktop"
     
@@ -208,7 +346,8 @@ show_desktop_info() {
     fi
     
     # Find the launch script path from desktop file
-    local launch_script=$(grep "^Exec=" "$desktop_file" | cut -d'=' -f2)
+    local launch_script
+    launch_script=$(grep "^Exec=" "$desktop_file" | cut -d'=' -f2)
     
     zenity --info --title="SCUM Admin Helper - Desktop Shortcut" --width=600 --text="<b>Desktop Shortcut Installed</b>
 
@@ -234,51 +373,46 @@ to avoid this, or ignore Steam's status indicator." 2>/dev/null
 test_sah_launch() {
     log "User selected: Test Launch"
     
-    # Find the launch script in the SCUM directory
-    local launch_script=""
+    # Find SAH in SCUM prefix
+    local sah_exe=""
+    local wine_prefix=""
     for lib in ~/.steam/steam ~/.local/share/Steam /mnt/*/SteamLibrary /mnt/*/*/SteamLibrary; do
-        if [ -d "$lib" ]; then
-            local scum_script="$lib/steamapps/common/SCUM/launch-sah.sh"
-            if [ -f "$scum_script" ]; then
-                launch_script="$scum_script"
-                break
-            fi
+        local test_exe="$lib/steamapps/compatdata/$SCUM_APPID/pfx/drive_c/users/steamuser/AppData/Local/SCUM_Admin_Helper/SCUM Admin Helper.exe"
+        if [ -f "$test_exe" ]; then
+            sah_exe="$test_exe"
+            wine_prefix="$lib/steamapps/compatdata/$SCUM_APPID/pfx"
+            break
         fi
     done
     
-    if [ -z "$launch_script" ] || [ ! -f "$launch_script" ]; then
-        log "ERROR: Launch script not found"
-        show_error "Launch script not found!\n\nPlease run the installation first.\n\nThe script should be in:\nSCUM/launch-sah.sh"
+    if [ -z "$sah_exe" ] || [ ! -f "$sah_exe" ]; then
+        log "ERROR: SAH not found in SCUM prefix"
+        show_error "SAH not found in SCUM prefix!\n\nPlease run the installation first."
         return 1
     fi
     
     if ask_question "This will launch SCUM Admin Helper.\n\nYou'll need to close it manually.\n\nContinue?"; then
         log "Launching SCUM Admin Helper..."
+        log "Using WINEPREFIX: $wine_prefix"
         show_working "Launching" "Starting SCUM Admin Helper..."
         
-        # Run launch script and capture output
-        if bash "$launch_script" > /tmp/sah-launch.log 2>&1 & then
-            local launch_pid=$!
-            sleep 3
-            
-            if pgrep -f "SCUM Admin Helper.exe" > /dev/null 2>&1; then
-                close_working
-                log "SAH launched successfully (PID: $(pgrep -f 'SCUM Admin Helper.exe'))"
-                show_info "✓ SCUM Admin Helper launched successfully!\n\nClose it when you're done testing."
-            else
-                close_working
-                log "ERROR: SAH failed to launch"
-                # Check if launch script had errors
-                if [ -f /tmp/sah-launch.log ] && [ -s /tmp/sah-launch.log ]; then
-                    show_error "✗ Failed to launch SCUM Admin Helper.\n\nError details saved to:\n/tmp/sah-launch.log\n\nCommon causes:\n• .NET Framework not installed\n• Proton prefix issues\n• SAH not installed correctly"
-                else
-                    show_error "✗ Failed to launch SCUM Admin Helper.\n\nThe process started but SAH didn't run.\n\nTry running manually:\n$launch_script"
-                fi
-            fi
+        # Launch SAH with Proton (Steam's Wine)
+        source "$SCRIPT_DIR/sah-env.sh"
+        protontricks-launch --appid $SCUM_APPID "$sah_exe" > /tmp/sah-launch.log 2>&1 &
+        sleep 5
+        
+        if pgrep -f "SCUM Admin Helper.exe" > /dev/null 2>&1; then
+            close_working
+            log "SAH launched successfully (PID: $(pgrep -f 'SCUM Admin Helper.exe'))"
+            show_info "✓ SCUM Admin Helper launched successfully!\n\nClose it when you're done testing."
         else
             close_working
-            log "ERROR: Failed to execute launch script"
-            show_error "✗ Failed to execute launch script.\n\nCheck that it exists and is executable:\n$launch_script"
+            log "ERROR: SAH failed to launch"
+            if [ -f /tmp/sah-launch.log ] && [ -s /tmp/sah-launch.log ]; then
+                show_error "✗ Failed to launch SCUM Admin Helper.\n\nError details saved to:\n/tmp/sah-launch.log\n\nCommon causes:\n• .NET Framework not installed\n• Proton prefix issues\n• SAH not installed correctly"
+            else
+                show_error "✗ Failed to launch SCUM Admin Helper.\n\nThe process started but SAH didn't run.\n\nTry running manually with Wine."
+            fi
         fi
     fi
 }
@@ -286,7 +420,12 @@ test_sah_launch() {
 # Function to manually control SAH
 manual_control() {
     log "User selected: Manual Control"
-    local choice=$(zenity --list --title="Manual Control" --width=400 --height=300 \
+    
+    # Close any lingering loading indicators
+    close_working 2>/dev/null
+    
+    local choice
+    choice=$(zenity --list --title="Manual Control" --width=400 --height=300 \
         --text="Select an action:" \
         --column="Action" --column="Description" \
         "Launch SAH" "Start SCUM Admin Helper" \
@@ -297,22 +436,25 @@ manual_control() {
     case "$choice" in
         "Launch SAH")
             log "Manual Control: Launch SAH"
-            # Find the launch script in the SCUM directory
-            local launch_script=""
+            # Find SAH in SCUM prefix
+            local sah_exe=""
+            local wine_prefix=""
             for lib in ~/.steam/steam ~/.local/share/Steam /mnt/*/SteamLibrary /mnt/*/*/SteamLibrary; do
-                if [ -d "$lib" ]; then
-                    local scum_script="$lib/steamapps/common/SCUM/launch-sah.sh"
-                    if [ -f "$scum_script" ]; then
-                        launch_script="$scum_script"
-                        break
-                    fi
+                local test_exe="$lib/steamapps/compatdata/$SCUM_APPID/pfx/drive_c/users/steamuser/AppData/Local/SCUM_Admin_Helper/SCUM Admin Helper.exe"
+                if [ -f "$test_exe" ]; then
+                    sah_exe="$test_exe"
+                    wine_prefix="$lib/steamapps/compatdata/$SCUM_APPID/pfx"
+                    break
                 fi
             done
             
-            if [ -n "$launch_script" ] && [ -f "$launch_script" ]; then
+            if [ -n "$sah_exe" ] && [ -f "$sah_exe" ]; then
+                log "Found SAH at: $sah_exe"
+                log "Using WINEPREFIX: $wine_prefix"
                 show_working "Starting" "Launching SCUM Admin Helper..."
-                bash "$launch_script" > /tmp/sah-manual-launch.log 2>&1 &
-                sleep 2
+                source "$SCRIPT_DIR/sah-env.sh"
+                protontricks-launch --appid $SCUM_APPID "$sah_exe" > /tmp/sah-manual-launch.log 2>&1 &
+                sleep 5
                 
                 if pgrep -f "SCUM Admin Helper.exe" > /dev/null 2>&1; then
                     close_working
@@ -328,8 +470,8 @@ manual_control() {
                     fi
                 fi
             else
-                log "ERROR: Launch script not found"
-                show_error "✗ Launch script not found\n\nPlease run the installation first.\n\nThe script should be in:\nSCUM/launch-sah.sh"
+                log "ERROR: SAH not found in SCUM prefix"
+                show_error "✗ SAH not found in SCUM prefix\n\nPlease run the installation first."
             fi
             ;;
         "Stop SAH")
@@ -358,16 +500,178 @@ manual_control() {
             ;;
         "Status")
             log "Manual Control: Status check"
-            local status=$(check_installation_status 0)
-            zenity --info --title="Status" --text="$status" --width=400 --no-wrap 2>/dev/null
+            local status
+            status=$(check_installation_status 0)
             zenity --info --title="Status" --text="$status" --width=400 --no-wrap 2>/dev/null
             ;;
     esac
 }
 
+# Function to launch SCUM and SAH together
+launch_scum_and_sah() {
+    log "User selected: Launch SCUM + SAH"
+    
+    # Check if already running
+    local scum_running=0
+    local sah_running=0
+    
+    if pgrep -f "SCUM.exe" > /dev/null 2>&1; then
+        scum_running=1
+    fi
+    
+    if pgrep -f "SCUM Admin Helper.exe" > /dev/null 2>&1; then
+        sah_running=1
+    fi
+    
+    if [ $scum_running -eq 1 ] && [ $sah_running -eq 1 ]; then
+        show_info "✓ Both SCUM and SAH are already running!"
+        return 0
+    fi
+    
+    # Launch SCUM if not running
+    if [ $scum_running -eq 0 ]; then
+        log "Launching SCUM via Steam"
+        show_working "Launching" "Starting SCUM via Steam..."
+        
+        # Launch SCUM via Steam
+        steam steam://rungameid/$SCUM_APPID &
+        
+        # Wait for SCUM to start
+        local wait_count=0
+        while [ $wait_count -lt 30 ]; do
+            if pgrep -f "SCUM.exe" > /dev/null 2>&1; then
+                log "SCUM started successfully"
+                break
+            fi
+            sleep 1
+            ((wait_count++))
+        done
+        
+        if [ $wait_count -ge 30 ]; then
+            close_working
+            show_error "✗ SCUM failed to start within 30 seconds.\n\nPlease start SCUM manually from Steam."
+            return 1
+        fi
+        
+        # Give SCUM a moment to initialize
+        sleep 2
+        close_working
+    else
+        log "SCUM is already running"
+    fi
+    
+    # Launch SAH if not running
+    if [ $sah_running -eq 0 ]; then
+        log "Launching SAH"
+        show_working "Launching" "Starting SCUM Admin Helper..."
+        
+        # Find SAH in SCUM prefix
+        local sah_exe=""
+        local wine_prefix=""
+        for lib in ~/.steam/steam ~/.local/share/Steam /mnt/*/SteamLibrary /mnt/*/*/SteamLibrary; do
+            local test_exe="$lib/steamapps/compatdata/$SCUM_APPID/pfx/drive_c/users/steamuser/AppData/Local/SCUM_Admin_Helper/SCUM Admin Helper.exe"
+            if [ -f "$test_exe" ]; then
+                sah_exe="$test_exe"
+                wine_prefix="$lib/steamapps/compatdata/$SCUM_APPID/pfx"
+                break
+            fi
+        done
+        
+        if [ -n "$sah_exe" ] && [ -f "$sah_exe" ]; then
+            log "Found SAH at: $sah_exe"
+            log "Using WINEPREFIX: $wine_prefix"
+            
+            # Launch SAH with Proton (Steam's Wine)
+            source "$SCRIPT_DIR/sah-env.sh"
+            protontricks-launch --appid $SCUM_APPID "$sah_exe" > /tmp/sah-launch.log 2>&1 &
+            sleep 5
+            
+            if pgrep -f "SCUM Admin Helper.exe" > /dev/null 2>&1; then
+                close_working
+                log "SAH started successfully"
+                show_info "✓ SCUM and SAH launched successfully!\n\nSCUM Admin Helper is now running.\n\nWatchdog will monitor SCUM and offer to close SAH when SCUM exits."
+                
+                # Start watchdog in background
+                start_watchdog &
+            else
+                close_working
+                log "ERROR: Failed to start SAH"
+                show_error "✗ Failed to start SCUM Admin Helper\n\nCheck error log:\n/tmp/sah-launch.log"
+                return 1
+            fi
+        else
+            close_working
+            log "ERROR: SAH not found in SCUM prefix"
+            show_error "✗ SAH not found in SCUM prefix\n\nPlease run the installation first."
+            return 1
+        fi
+    else
+        log "SAH is already running"
+        show_info "✓ SCUM and SAH are both running!\n\nWatchdog will monitor SCUM and offer to close SAH when SCUM exits."
+        
+        # Start watchdog in background
+        start_watchdog &
+    fi
+}
+
+# Function to monitor SCUM and offer to close SAH when SCUM exits
+start_watchdog() {
+    log "Starting SCUM/SAH watchdog"
+    
+    # Wait for SCUM to be running
+    while ! pgrep -f "SCUM.exe" > /dev/null 2>&1; do
+        sleep 2
+    done
+    
+    log "Watchdog: SCUM is running, monitoring..."
+    
+    # Monitor SCUM process
+    while pgrep -f "SCUM.exe" > /dev/null 2>&1; do
+        sleep 5
+    done
+    
+    log "Watchdog: SCUM has exited"
+    
+    # Check if SAH is still running
+    if pgrep -f "SCUM Admin Helper.exe" > /dev/null 2>&1; then
+        log "Watchdog: SAH still running, prompting user"
+        
+        # Prompt user to close SAH
+        if zenity --question --title="SCUM Admin Helper Watchdog" \
+            --text="<b>SCUM has closed</b>\n\nSCUM Admin Helper is still running.\nThis may cause Steam to show SCUM as 'Running'.\n\nClose SCUM Admin Helper now?" \
+            --width=400 --timeout=30 2>/dev/null; then
+            
+            log "Watchdog: User chose to close SAH"
+            pkill -f "SCUM Admin Helper.exe" 2>/dev/null
+            sleep 1
+            
+            if pgrep -f "SCUM Admin Helper.exe" > /dev/null 2>&1; then
+                zenity --warning --title="SCUM Admin Helper Watchdog" \
+                    --text="⚠ Failed to close SAH automatically.\n\nPlease close it manually or run:\npkill -9 -f 'SCUM Admin Helper.exe'" \
+                    --width=400 2>/dev/null
+            else
+                log "Watchdog: SAH closed successfully"
+                zenity --info --title="SCUM Admin Helper Watchdog" \
+                    --text="✓ SCUM Admin Helper closed successfully" \
+                    --timeout=5 --width=300 2>/dev/null
+            fi
+        else
+            log "Watchdog: User chose to keep SAH running or timed out"
+        fi
+    else
+        log "Watchdog: SAH already closed"
+    fi
+    
+    log "Watchdog: Exiting"
+}
+
 # Function to view logs
 view_logs() {
     log "User selected: View Logs"
+    
+    # Close any lingering loading indicators
+    close_working 2>/dev/null
+    
     local log_files=()
     
     # Check for log files
@@ -381,7 +685,8 @@ view_logs() {
         return
     fi
     
-    local selected=$(zenity --list --title="View Logs" --width=500 --height=300 \
+    local selected
+    selected=$(zenity --list --title="View Logs" --width=500 --height=300 \
         --checklist --column="View" --column="File" --column="Description" \
         "${log_files[@]}" 2>/dev/null)
     
@@ -405,6 +710,9 @@ view_logs() {
 manage_backups() {
     log "User selected: Backup Management"
     
+    # Close any lingering loading indicators
+    close_working 2>/dev/null
+    
     # Find SCUM prefix first
     local compat_path=""
     for lib in ~/.steam/steam ~/.local/share/Steam /mnt/*/SteamLibrary /mnt/*/*/SteamLibrary; do
@@ -420,7 +728,8 @@ manage_backups() {
         return 1
     fi
     
-    local choice=$(zenity --list --title="Backup Management" --width=450 --height=350 \
+    local choice
+    choice=$(zenity --list --title="Backup Management" --width=450 --height=350 \
         --text="Manage SCUM Admin Helper backups:\n\nSCUM Prefix: $compat_path" \
         --column="Action" --column="Description" \
         "Create Backup" "Create new backup" \
@@ -449,7 +758,8 @@ manage_backups() {
 create_backup() {
     local compat_path="$1"
     
-    local backup_type=$(zenity --list --title="Backup Type" --width=450 --height=250 \
+    local backup_type
+    backup_type=$(zenity --list --title="Backup Type" --width=450 --height=250 \
         --text="Select backup type:" \
         --column="Type" --column="Size" --column="Description" \
         "SAH Only" "~100MB" "SAH app + settings + .NET info" \
@@ -459,7 +769,8 @@ create_backup() {
         return 0
     fi
     
-    local backup_dir="$HOME/sah-backups/backup-$(date +%Y%m%d-%H%M%S)"
+    local backup_dir
+    backup_dir="$HOME/sah-backups/backup-$(date +%Y%m%d-%H%M%S)"
     
     case "$backup_type" in
         "SAH Only")
@@ -496,7 +807,8 @@ EOF
             
             close_working
             
-            local size=$(du -sh "$backup_dir" 2>/dev/null | cut -f1)
+            local size
+            size=$(du -sh "$backup_dir" 2>/dev/null | cut -f1)
             show_info "✓ SAH backup created!\n\nLocation: $backup_dir\nSize: $size\n\nBacked up:\n• SAH application\n• SAH settings\n• Winetricks log"
             log "Backup created: $backup_dir ($size)"
             ;;
@@ -506,7 +818,8 @@ EOF
             
             # Calculate and show size first
             show_working "Calculating" "Calculating prefix size..."
-            local size=$(du -sh "$compat_path" 2>/dev/null | cut -f1)
+            local size
+            size=$(du -sh "$compat_path" 2>/dev/null | cut -f1)
             close_working
             
             if ! ask_question "This will backup the entire SCUM prefix.\n\nSize: $size\nTime: Several minutes\n\nContinue?"; then
@@ -534,7 +847,8 @@ EOF
             
             close_working
             
-            local backup_size=$(du -sh "$backup_dir" 2>/dev/null | cut -f1)
+            local backup_size
+            backup_size=$(du -sh "$backup_dir" 2>/dev/null | cut -f1)
             show_info "✓ Full prefix backup created!\n\nLocation: $backup_dir\nSize: $backup_size\n\nThis backup includes everything:\n• SAH installation\n• .NET Framework\n• All prefix modifications"
             log "Full backup created: $backup_dir ($backup_size)"
             ;;
@@ -557,10 +871,14 @@ list_backups() {
     
     for backup in "$HOME/sah-backups"/backup-*; do
         if [ -d "$backup" ] && [ -f "$backup/backup-info.txt" ]; then
-            local backup_name=$(basename "$backup")
-            local backup_size=$(du -sh "$backup" 2>/dev/null | cut -f1)
-            local backup_type=$(grep "^Backup Type:" "$backup/backup-info.txt" 2>/dev/null | cut -d':' -f2- | xargs)
-            local backup_date=$(grep "^Backup Date:" "$backup/backup-info.txt" 2>/dev/null | cut -d':' -f2- | xargs)
+            local backup_name
+            backup_name=$(basename "$backup")
+            local backup_size
+            backup_size=$(du -sh "$backup" 2>/dev/null | cut -f1)
+            local backup_type
+            backup_type=$(grep "^Backup Type:" "$backup/backup-info.txt" 2>/dev/null | cut -d':' -f2- | xargs)
+            local backup_date
+            backup_date=$(grep "^Backup Date:" "$backup/backup-info.txt" 2>/dev/null | cut -d':' -f2- | xargs)
             
             backup_list+=("FALSE" "$backup_name" "$backup_type" "$backup_size" "$backup_date")
             ((backup_count++))
@@ -574,18 +892,19 @@ list_backups() {
         return 0
     fi
     
-    local selected=$(zenity --list --title="Available Backups" --width=700 --height=400 \
+    local selected
+    selected=$(zenity --list --title="Available Backups" --width=700 --height=400 \
         --text="Found $backup_count backup(s):\n" \
         --checklist --column="View" --column="Backup Name" --column="Type" --column="Size" --column="Date" \
         "${backup_list[@]}" 2>/dev/null)
     
     if [ -n "$selected" ]; then
         # Show details for selected backup
-        local backup_name=$(echo "$selected" | cut -d'|' -f1)
+        local backup_name
+        backup_name=$(echo "$selected" | cut -d'|' -f1)
         local backup_path="$HOME/sah-backups/$backup_name"
         
         if [ -f "$backup_path/backup-info.txt" ]; then
-            local info=$(cat "$backup_path/backup-info.txt")
             zenity --text-info --title="Backup Details: $backup_name" \
                 --width=600 --height=400 --filename="$backup_path/backup-info.txt" 2>/dev/null
         fi
@@ -609,9 +928,12 @@ restore_backup() {
     
     for backup in "$HOME/sah-backups"/backup-*; do
         if [ -d "$backup" ] && [ -f "$backup/backup-info.txt" ]; then
-            local backup_name=$(basename "$backup")
-            local backup_type=$(grep "^Backup Type:" "$backup/backup-info.txt" 2>/dev/null | cut -d':' -f2- | xargs)
-            local backup_date=$(grep "^Backup Date:" "$backup/backup-info.txt" 2>/dev/null | cut -d':' -f2- | xargs)
+            local backup_name
+            backup_name=$(basename "$backup")
+            local backup_type
+            backup_type=$(grep "^Backup Type:" "$backup/backup-info.txt" 2>/dev/null | cut -d':' -f2- | xargs)
+            local backup_date
+            backup_date=$(grep "^Backup Date:" "$backup/backup-info.txt" 2>/dev/null | cut -d':' -f2- | xargs)
             
             backup_list+=("$backup_name" "$backup_type - $backup_date")
             ((backup_count++))
@@ -625,7 +947,8 @@ restore_backup() {
         return 1
     fi
     
-    local selected=$(zenity --list --title="Restore Backup" --width=600 --height=400 \
+    local selected
+    selected=$(zenity --list --title="Restore Backup" --width=600 --height=400 \
         --text="Select backup to restore:\n⚠ This will overwrite current installation!" \
         --column="Backup Name" --column="Details" \
         "${backup_list[@]}" 2>/dev/null)
@@ -635,7 +958,8 @@ restore_backup() {
     fi
     
     local backup_path="$HOME/sah-backups/$selected"
-    local backup_type=$(grep "^Backup Type:" "$backup_path/backup-info.txt" 2>/dev/null | cut -d':' -f2- | xargs)
+    local backup_type
+    backup_type=$(grep "^Backup Type:" "$backup_path/backup-info.txt" 2>/dev/null | cut -d':' -f2- | xargs)
     
     # Confirm restore
     if ! ask_question "⚠ WARNING ⚠\n\nThis will restore:\n$selected\n\nType: $backup_type\n\nCurrent installation will be overwritten!\n\nContinue?"; then
@@ -715,9 +1039,12 @@ delete_backups() {
     
     for backup in "$HOME/sah-backups"/backup-*; do
         if [ -d "$backup" ] && [ -f "$backup/backup-info.txt" ]; then
-            local backup_name=$(basename "$backup")
-            local backup_size=$(du -sh "$backup" 2>/dev/null | cut -f1)
-            local backup_type=$(grep "^Backup Type:" "$backup/backup-info.txt" 2>/dev/null | cut -d':' -f2- | xargs)
+            local backup_name
+            backup_name=$(basename "$backup")
+            local backup_size
+            backup_size=$(du -sh "$backup" 2>/dev/null | cut -f1)
+            local backup_type
+            backup_type=$(grep "^Backup Type:" "$backup/backup-info.txt" 2>/dev/null | cut -d':' -f2- | xargs)
             
             backup_list+=("FALSE" "$backup_name" "$backup_type" "$backup_size")
             ((backup_count++))
@@ -731,7 +1058,8 @@ delete_backups() {
         return 0
     fi
     
-    local selected=$(zenity --list --title="Delete Backups" --width=600 --height=400 \
+    local selected
+    selected=$(zenity --list --title="Delete Backups" --width=600 --height=400 \
         --text="Select backups to delete:\n⚠ This action cannot be undone!" \
         --checklist --column="Delete" --column="Backup Name" --column="Type" --column="Size" \
         "${backup_list[@]}" 2>/dev/null)
@@ -741,7 +1069,8 @@ delete_backups() {
     fi
     
     # Confirm deletion
-    local delete_count=$(echo "$selected" | tr '|' '\n' | wc -l)
+    local delete_count
+    delete_count=$(echo "$selected" | tr '|' '\n' | wc -l)
     if ! ask_question "⚠ WARNING ⚠\n\nDelete $delete_count backup(s)?\n\nThis action CANNOT be undone!\n\nContinue?"; then
         log "Deletion cancelled by user"
         return 0
@@ -763,6 +1092,63 @@ delete_backups() {
     
     show_info "✓ Deleted $deleted backup(s)\n\nRemaining backups can be viewed via:\nBackup Management > List Backups"
     log "Deleted $deleted backups"
+}
+
+# Function to offer video removal (called after installation)
+offer_video_removal() {
+    log "Offering video removal to user"
+    
+    # Check if SCUM videos exist
+    local scum_movies_path=""
+    for lib in ~/.steam/steam ~/.local/share/Steam /mnt/*/SteamLibrary /mnt/*/*/SteamLibrary; do
+        local test_path="$lib/steamapps/common/SCUM/SCUM/Content/Movies"
+        if [ -d "$test_path" ]; then
+            scum_movies_path="$test_path"
+            break
+        fi
+    done
+    
+    if [ -z "$scum_movies_path" ] || [ ! -d "$scum_movies_path" ]; then
+        log "SCUM movies folder not found, skipping video removal offer"
+        return 0
+    fi
+    
+    # Check if intro videos exist
+    local has_videos=false
+    if [ -f "$scum_movies_path/Intro_Cinematic.mp4" ] || \
+       [ -f "$scum_movies_path/Character_Creation_Cinematic.mp4" ] || \
+       [ -f "$scum_movies_path/SCUMsplash.mp4" ]; then
+        has_videos=true
+    fi
+    
+    if [ "$has_videos" = false ]; then
+        log "SCUM intro videos already removed, skipping offer"
+        return 0
+    fi
+    
+    # Offer to remove videos
+    if zenity --question --title="Save Disk Space?" --width=500 \
+        --text="<b>💡 Tip: Free Up ~940MB</b>
+
+SCUM includes intro cinematics that can be removed to save space:
+
+• Intro Cinematic (~289MB)
+• Character Creation Cinematic (~650MB)
+• Splash Videos (~1.4MB)
+
+<b>Total space saved: ~940MB</b>
+
+These videos only play once and can be safely removed.
+
+<b>Note:</b> Steam may re-download when verifying files.
+
+Would you like to remove them now?" 2>/dev/null; then
+        log "User accepted video removal offer"
+        remove_scum_videos
+    else
+        log "User declined video removal offer"
+        show_info "No problem!\n\nYou can remove intro videos later from:\nAdvanced Tools > Remove SCUM Videos"
+    fi
 }
 
 # Function to remove SCUM intro videos
@@ -827,7 +1213,21 @@ Remove intro videos?" 2>/dev/null; then
 # Function to show troubleshooting guide
 show_troubleshooting() {
     log "User selected: Troubleshooting"
-    zenity --info --title="Troubleshooting" --width=600 --height=500 --text="<b>Common Issues:</b>
+    close_working 2>/dev/null
+    
+    # Show troubleshooting menu with actions
+    local choice=$(zenity --list --title="Troubleshooting" --width=700 --height=500 \
+        --column="Option" --column="Description" \
+        "View Guide" "Show common issues and solutions" \
+        "Reinstall .NET" "Fix 'DLL not verified' errors" \
+        "View Logs" "Check installation and launch logs" \
+        "Test Installation" "Verify SAH components" \
+        "Back" "Return to main menu" \
+        2>/dev/null)
+    
+    case "$choice" in
+        "View Guide")
+            zenity --info --title="Troubleshooting Guide" --width=600 --height=500 --text="<b>Common Issues:</b>
 
 <b>1. SAH doesn't launch:</b>
    • Ensure SCUM was run at least once (creates Proton prefix)
@@ -839,25 +1239,169 @@ show_troubleshooting() {
    • Close manually: pkill -f 'SCUM Admin Helper.exe'
    • Or use Manual Control menu option
 
-<b>3. Steam shows SCUM running when only SAH is open:</b>
+<b>3. 'DLL not verified' / .NET Assembly errors:</b>
+   • Use 'Reinstall .NET' option in this menu
+   • Or run: ./scripts/reinstall-dotnet.sh
+   • Fixes corrupted .NET Framework registry entries
+
+<b>4. Steam shows SCUM running when only SAH is open:</b>
    • This is expected behavior - SAH uses SCUM's prefix (App ID 513710)
    • Steam detects Proton/Wine activity and thinks SCUM is running
-   • Workaround: Close SAH before closing SCUM, or ignore the indicator
+   • Workaround: Close SAH before launching SCUM, or ignore the indicator
    • Does not affect gameplay or Steam functionality
 
-<b>4. Installation fails:</b>
+<b>5. File dialogs don't work:</b>
+   • Run: ./scripts/fix-file-dialogs.sh
+   • Or manually place files in SAH directory
+   • See troubleshooting.md for detailed workarounds
+
+<b>6. Installation fails:</b>
    • Check internet connection
    • Verify disk space available
-   • Review log files (View Logs menu)
+   • Review log files (View Logs in this menu)
    • Ensure SCUM launched at least once
 
-<b>5. Dependencies missing:</b>
+<b>7. Dependencies missing:</b>
    • protontricks: pip install protontricks
    • curl: Install via system package manager
    • unzip: Install via system package manager
 
 <b>More help:</b>
 See docs/troubleshooting.md" 2>/dev/null
+            show_troubleshooting
+            ;;
+        "Reinstall .NET")
+            if zenity --question --title="Reinstall .NET Framework" --width=500 \
+                --text="This will force-reinstall .NET Framework 4.8 in SCUM's Proton prefix.\n\nThis fixes:\n• 'DLL not verified' errors\n• .NET assembly verification failures\n• Corrupted registry entries\n\nThe process takes 5-10 minutes.\n\nProceed?" 2>/dev/null; then
+                
+                # Launch terminal with the reinstall script
+                if command -v konsole &> /dev/null; then
+                    konsole --hold -e "$SCRIPT_DIR/reinstall-dotnet.sh" &
+                elif command -v gnome-terminal &> /dev/null; then
+                    gnome-terminal -- bash -c "$SCRIPT_DIR/reinstall-dotnet.sh; echo ''; echo 'Press Enter to close...'; read" &
+                elif command -v xfce4-terminal &> /dev/null; then
+                    xfce4-terminal --hold -e "$SCRIPT_DIR/reinstall-dotnet.sh" &
+                else
+                    xterm -hold -e "$SCRIPT_DIR/reinstall-dotnet.sh" &
+                fi
+                
+                zenity --info --title="Reinstall Started" --width=400 \
+                    --text="The .NET Framework reinstallation has been started in a terminal window.\n\nFollow the on-screen instructions.\n\nYou'll see many 'fixme:' messages - these are normal.\n\nAfter completion, test SAH to verify the fix worked." 2>/dev/null
+            fi
+            show_troubleshooting
+            ;;
+        "View Logs")
+            show_logs
+            show_troubleshooting
+            ;;
+        "Test Installation")
+            test_installation
+            show_troubleshooting
+            ;;
+        "Back"|*)
+            return
+            ;;
+    esac
+}
+
+# Advanced tools submenu
+advanced_tools() {
+    while true; do
+        local choice
+        choice=$(zenity --list --title="Advanced Tools" \
+            --width=550 --height=400 \
+            --text="<b>Advanced Configuration & Optimization</b>\n" \
+            --column="Tool" --column="Description" \
+            "Configure SAH Delays" "Optimize chat delays for Linux" \
+            "Fix File Dialogs" "Enable import/export dialogs" \
+            "Open SAH Folder" "Access import/export location" \
+            "Create Desktop Shortcut" "Add desktop launcher" \
+            "Remove SCUM Videos" "Skip intro videos (~940MB)" \
+            "Back" "Return to main menu" 2>/dev/null)
+        
+        case "$choice" in
+            "Configure SAH Delays")
+                log "Advanced Tools: Configure SAH Delays"
+                show_info "Configure SAH Delays\n\nThis will open a terminal to configure chat delay settings.\n\nRecommended for optimal Linux performance."
+                if command -v konsole &> /dev/null; then
+                    konsole -e "$SCRIPT_DIR/configure-sah-delays.sh" 2>/dev/null
+                elif command -v gnome-terminal &> /dev/null; then
+                    gnome-terminal -- "$SCRIPT_DIR/configure-sah-delays.sh" 2>/dev/null
+                elif command -v xfce4-terminal &> /dev/null; then
+                    xfce4-terminal -e "$SCRIPT_DIR/configure-sah-delays.sh" 2>/dev/null
+                else
+                    xterm -e "$SCRIPT_DIR/configure-sah-delays.sh" 2>/dev/null || \
+                    show_error "Could not open terminal.\n\nRun manually: ./scripts/configure-sah-delays.sh"
+                fi
+                ;;
+            "Fix File Dialogs")
+                log "Advanced Tools: Fix File Dialogs"
+                show_info "Fix File Dialogs\n\nThis will install Windows components to enable import/export dialogs.\n\nMay take 5-10 minutes."
+                if command -v konsole &> /dev/null; then
+                    konsole -e "$SCRIPT_DIR/fix-file-dialogs.sh" 2>/dev/null
+                elif command -v gnome-terminal &> /dev/null; then
+                    gnome-terminal -- "$SCRIPT_DIR/fix-file-dialogs.sh" 2>/dev/null
+                elif command -v xfce4-terminal &> /dev/null; then
+                    xfce4-terminal -e "$SCRIPT_DIR/fix-file-dialogs.sh" 2>/dev/null
+                else
+                    xterm -e "$SCRIPT_DIR/fix-file-dialogs.sh" 2>/dev/null || \
+                    show_error "Could not open terminal.\n\nRun manually: ./scripts/fix-file-dialogs.sh"
+                fi
+                ;;
+            "Open SAH Folder")
+                log "Advanced Tools: Open SAH Folder"
+                "$SCRIPT_DIR/open-sah-folder.sh" &
+                show_info "Opening SAH folder...\n\nThis is where file dialogs save/load files.\n\nUse this location for import/export operations."
+                ;;
+            "Create Desktop Shortcut")
+                create_desktop_shortcut
+                ;;
+            "Remove SCUM Videos")
+                remove_scum_videos
+                ;;
+            "Back"|"")
+                return
+                ;;
+        esac
+    done
+}
+
+# System & maintenance submenu
+system_maintenance() {
+    while true; do
+        # Count backups
+        local backup_count=0
+        if [ -d "$HOME/sah-backups" ]; then
+            backup_count=$(find "$HOME/sah-backups" -maxdepth 1 -type d -name 'backup-*' 2>/dev/null | wc -l)
+        fi
+        
+        local choice
+        choice=$(zenity --list --title="System & Maintenance" \
+            --width=550 --height=350 \
+            --text="<b>Backup, Logs, and Troubleshooting</b>\n\nBackups available: $backup_count" \
+            --column="Tool" --column="Description" \
+            "Backup Management" "Create/restore SAH backups" \
+            "View Logs" "Check error logs" \
+            "Troubleshooting" "Common issues & fixes" \
+            "Back" "Return to main menu" 2>/dev/null)
+        
+        case "$choice" in
+            "Backup Management")
+                manage_backups
+                ;;
+            "View Logs")
+                show_working "Logs" "Searching for log files..."
+                view_logs
+                close_working
+                ;;
+            "Troubleshooting")
+                show_troubleshooting
+                ;;
+            "Back"|"")
+                return
+                ;;
+        esac
+    done
 }
 
 # Main menu loop
@@ -867,7 +1411,7 @@ main_menu() {
         show_working "Loading" "Checking system status..."
         
         # Get current status (quiet mode for main menu)
-        local status_text=$(check_installation_status 1)
+        check_installation_status 1 > /dev/null
         local is_installed=$?
         
         close_working
@@ -884,57 +1428,62 @@ main_menu() {
             backup_count=$(find "$HOME/sah-backups" -maxdepth 1 -type d -name 'backup-*' 2>/dev/null | wc -l)
         fi
         local backup_status=""
-        if [ $backup_count -gt 0 ]; then
-            backup_status="  |  Backups: $backup_count"
+        if [ "$backup_count" -gt 0 ]; then
+            backup_status="  |  $backup_count Backup(s)"
         fi
         
-        local choice=$(zenity --list --title="SCUM Admin Helper Manager" \
-            --width=500 --height=500 \
+        local choice
+        choice=$(zenity --list --title="SCUM Admin Helper Manager" \
+            --width=550 --height=450 \
             --text="<b>Status:</b> $status_summary$backup_status\n\nSelect an action:" \
             --column="Action" --column="Description" \
-            "Install" "Run full installation wizard" \
-            "Desktop Info" "Show desktop shortcut info" \
-            "Test Launch" "Test SAH launch manually" \
-            "Status" "View detailed status" \
+            "Launch SCUM + SAH" "Start both with watchdog" \
             "Manual Control" "Start/Stop SAH manually" \
-            "Backup Management" "Create/restore/manage backups" \
-            "View Logs" "View installation logs" \
-            "Troubleshooting" "Common issues and fixes" \
-            "" "" \
-            "Remove SCUM Videos" "Skip intro videos (saves ~940MB)" \
-            "Quit" "Exit this program" 2>/dev/null)
+            "Install" "Run installation wizard" \
+            "Status" "View detailed status" \
+            "Advanced Tools" "Shortcuts, dialogs, optimization" \
+            "System & Maintenance" "Backups, logs, troubleshooting" \
+            "Quit" "Exit" 2>/dev/null)
+        
+        # Ensure any lingering loading indicators are closed
+        close_working 2>/dev/null
         
         case "$choice" in
-            "Install")
-                run_installation
-                ;;
-            "Desktop Info")
-                show_desktop_info
-                ;;
-            "Test Launch")
-                test_sah_launch
-                ;;
-            "Status")
-                log "User selected: Status"
-                local detailed_status=$(check_installation_status 0)
-                zenity --info --title="Detailed Status" --text="$detailed_status" --width=400 --no-wrap 2>/dev/null
+            "Launch SCUM + SAH")
+                launch_scum_and_sah
                 ;;
             "Manual Control")
                 manual_control
                 ;;
-            "Backup Management")
-                manage_backups
+            "Install")
+                run_installation
                 ;;
-            "View Logs")
-                show_working "Logs" "Searching for log files..."
-                view_logs
-                close_working
+            "Status")
+                log "User selected: Status"
+                
+                # Run the external status script with --detailed flag
+                local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+                
+                # Capture both stdout and check if script exists
+                if [ -f "$script_dir/status-sah.sh" ]; then
+                    local detailed_output
+                    detailed_output=$(bash "$script_dir/status-sah.sh" --detailed 2>&1)
+                    
+                    # Show in scrollable text window for better readability
+                    zenity --text-info --title="Detailed Status" --width=700 --height=600 \
+                        --filename=<(echo "$detailed_output") 2>/dev/null
+                else
+                    # Fallback to old behavior if script not found
+                    local detailed_status
+                    detailed_status=$(check_installation_status 0)
+                    zenity --info --title="Status" --text="$detailed_status" --width=400 --no-wrap 2>/dev/null
+                fi
                 ;;
-            "Troubleshooting")
-                show_troubleshooting
+            "Advanced Tools")
+                advanced_tools
                 ;;
-            "Remove SCUM Videos")
-                remove_scum_videos
+            "System & Maintenance")
+                system_maintenance
                 ;;
             "Quit"|"")
                 log "User quit GUI"

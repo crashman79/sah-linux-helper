@@ -83,9 +83,14 @@ chmod +x scripts/install-sah.sh
 The installer:
 1. Downloads SAH from official source (~110MB)
 2. Installs SAH into SCUM's Proton prefix (shared .NET environment)
-3. Creates `launch-sah.sh` in your SCUM game directory
+3. Creates `launch-sah.sh` using `protontricks-launch` (Steam's Proton)
 4. Creates desktop shortcut pointing to the launch script
 5. Desktop shortcut appears in application menu
+
+**Why Proton?** SAH uses Steam's Proton runtime (via protontricks) instead of system Wine to ensure:
+- ✅ Proper Direct3D/OpenGL rendering (no graphical glitches)
+- ✅ Settings and registration key persistence
+- ✅ Consistent .NET Framework environment
 
 **File Locations:**
 - **SAH Application**: `~/.steam/.../compatdata/513710/pfx/drive_c/.../SCUM_Admin_Helper/`
@@ -102,10 +107,12 @@ The installer:
 - Internet connection
 
 **Dependencies** (installer checks and guides you):
-- `protontricks` (Python package)
+- `protontricks` (Python package) - **Required for launching SAH with Steam's Proton**
 - `zenity` (for GUI)
 - `curl` (usually pre-installed)
 - `unzip` (usually pre-installed)
+
+**Important:** SAH uses Steam's Proton (via `protontricks-launch`) to ensure proper rendering and settings preservation. System Wine is NOT used.
 
 ### Quick Dependency Install
 
@@ -128,14 +135,17 @@ pip install protontricks
 ```
 sah-scripts/
 ├── scripts/
-│   ├── sah-helper.sh          # Main GUI application ⭐
-│   ├── install-sah.sh      # Automated installer
-│   ├── backup-sah.sh       # Backup utility
-│   ├── restore-sah.sh      # Restore utility
-│   ├── kill-sah.sh         # Force stop SAH
-│   └── status-sah.sh       # Status checker
+│   ├── sah-helper.sh              # Main GUI application ⭐
+│   ├── install-sah.sh             # Automated installer
+│   ├── configure-sah-delays.sh    # Configure chat delays for Linux
+│   ├── fix-file-dialogs.sh        # Fix file import/export dialogs
+│   ├── backup-sah.sh              # Backup utility
+│   ├── restore-sah.sh             # Restore utility
+│   ├── open-sah-folder.sh         # Open SAH folder (for import/export)
+│   ├── kill-sah.sh                # Force stop SAH
+│   └── status-sah.sh              # Status checker
 ├── docs/
-│   ├── installation.md     # Detailed install guide
+│   ├── installation.md            # Detailed install guide
 │   ├── troubleshooting.md  # Problem solutions
 │   └── manual-installation.md  # Manual setup
 └── examples/
@@ -180,7 +190,7 @@ The shortcut points to: `/path/to/SteamLibrary/steamapps/common/SCUM/launch-sah.
 
 Backups stored in: `~/sah-backups/backup-YYYYMMDD-HHMMSS/`
 
-## ⚠️ Known Behavior
+## ⚠️ Known Limitations
 
 **Steam shows SCUM as "running" when only SAH is open:**
 - This is expected and harmless
@@ -188,6 +198,12 @@ Backups stored in: `~/sah-backups/backup-YYYYMMDD-HHMMSS/`
 - Steam sees Wine/Proton activity
 - Does NOT affect gameplay or Steam functionality
 - Workaround: Close SAH before closing SCUM, or ignore indicator
+
+**File Import/Export dialogs don't work:**
+- Wine/Proton doesn't support Windows Vista's Common File Dialog API
+- **Workaround**: Use `./scripts/open-sah-folder.sh` to open SAH's folder in your file manager
+- Manually drag/drop files for import, or copy exported files from SAH's directory
+- See [Troubleshooting Guide](docs/troubleshooting.md#10-file-dialogs-dont-work-importexport) for details
 
 ## 🔧 Advanced Usage
 

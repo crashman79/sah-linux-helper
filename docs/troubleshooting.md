@@ -280,7 +280,51 @@ protontricks 513710 dotnet40
 protontricks 513710 dotnet48
 ```
 
-### 8. Download Fails
+### 8. Garbled Graphics / Missing UI Elements
+
+**Symptoms:**
+- SAH window has garbled/scrambled graphics
+- Text is unreadable or missing
+- UI elements disappear or redraw incorrectly
+- Settings/registration key missing after launch
+
+**Cause:**
+Launching SAH with system Wine instead of Steam's Proton causes rendering issues.
+
+**Solutions:**
+
+**Use the provided launchers:**
+- Desktop shortcut (application menu)
+- GUI helper: `./scripts/sah-helper.sh`
+- Launch script: `/path/to/SCUM/launch-sah.sh`
+
+All proper launchers use `protontricks-launch` which uses Steam's Proton.
+
+**DO NOT launch SAH with:**
+```bash
+# ❌ WRONG - uses system Wine
+export WINEPREFIX=/path/to/pfx
+wine "SCUM Admin Helper.exe"
+```
+
+**Correct launch method:**
+```bash
+# ✅ CORRECT - uses Steam's Proton
+protontricks-launch --appid 513710 "/path/to/SCUM Admin Helper.exe"
+```
+
+**Verify your launcher:**
+```bash
+# Check desktop shortcut
+cat ~/.local/share/applications/scum-admin-helper.desktop | grep Exec
+# Should show: protontricks-launch --appid 513710
+
+# Check launch script
+cat /path/to/SCUM/launch-sah.sh | grep protontricks
+# Should show: protontricks-launch --appid
+```
+
+### 9. Download Fails
 
 **Symptoms:**
 - "Failed to download SAH"
@@ -298,6 +342,183 @@ curl -I https://download.scumadminhelper.com
 **Retry download:**
 ```bash
 # Manual download
+
+### 10. File Dialogs Don't Work (Import/Export)
+
+**Symptoms:**
+- Clicking "Import" or "Export" buttons in SAH does nothing
+- File open/save dialogs don't appear or crash
+- Cannot browse for files to import/export
+- SAH logs show: `System.PlatformNotSupportedException: Common File Dialog requires Windows Vista or later`
+
+**Cause:**
+SAH uses Windows Vista's modern Common File Dialog API (Microsoft.WindowsAPICodePack) which Wine/Proton doesn't fully support. This is a known Wine limitation - the API reports itself as not available.
+
+**Error in SAH logs:**
+```
+WARN|System.PlatformNotSupportedException: Common File Dialog requires Windows Vista or later.
+   at Microsoft.WindowsAPICodePack.Dialogs.CommonFileDialog..ctor()
+```
+
+**Workarounds:**
+
+**Option 1: Manual File Placement** (Recommended)
+Instead of using SAH's file dialogs, manually place files in SAH's directory where it expects them:
+
+```bash
+# Find SAH's data directory
+SAH_DIR="/mnt/ct2000/SteamLibrary/steamapps/compatdata/513710/pfx/drive_c/users/steamuser/AppData/Local/SCUM_Admin_Helper"
+
+# For imports: Place your files here
+cp your-import-file.json "$SAH_DIR/"
+cp your-config.xml "$SAH_DIR/"
+
+# For exports: SAH saves files here, retrieve them
+ls -lh "$SAH_DIR/"/*.json
+cp "$SAH_DIR/exported-file.json" ~/Downloads/
+```
+
+**Option 2: Access via File Manager**
+Open SAH's directory in your file manager:
+
+```bash
+# KDE/Dolphin
+dolphin "/mnt/ct2000/SteamLibrary/steamapps/compatdata/513710/pfx/drive_c/users/steamuser/AppData/Local/SCUM_Admin_Helper" &
+
+# GNOME/Nautilus
+nautilus "/mnt/ct2000/SteamLibrary/steamapps/compatdata/513710/pfx/drive_c/users/steamuser/AppData/Local/SCUM_Admin_Helper" &
+
+# Generic
+xdg-open "/mnt/ct2000/SteamLibrary/steamapps/compatdata/513710/pfx/drive_c/users/steamuser/AppData/Local/SCUM_Admin_Helper"
+```
+
+Then drag-and-drop files between SAH's folder and your regular folders.
+
+**Option 3: Symlink Your Import Folder**
+Create a shortcut so your import files appear in SAH's directory:
+
+```bash
+# Create a symlink to your import folder
+SAH_DIR="/mnt/ct2000/SteamLibrary/steamapps/compatdata/513710/pfx/drive_c/users/steamuser/AppData/Local/SCUM_Admin_Helper"
+ln -s ~/Documents/SAH-Imports "$SAH_DIR/Imports"
+
+# Now files in ~/Documents/SAH-Imports appear in SAH's folder
+```
+
+**Option 4: Try Automated Fix Script** (Recommended to try first)
+Run the automated fix script that attempts multiple solutions:
+
+```bash
+./scripts/fix-file-dialogs.sh
+```
+
+This script will:
+- Set Windows version to Windows 10 (better dialog support)
+- Install native common dialog components (comdlg32ocx)
+- Add required Windows components (msxml3, msxml6, d3dcompiler_47)
+- Configure DLL overrides for file dialogs
+- Update environment variables for compatibility
+
+After running, restart SAH and test the Import/Export buttons.
+
+**Option 5: Manual Registry/DLL Fixes** (Advanced)
+If the automated script doesn't work, try these manual steps:
+
+```bash
+# Set Windows version to Windows 10
+protontricks 513710 winecfg
+# In the GUI: Applications tab → Windows Version → Windows 10
+
+# Install common dialog components
+protontricks 513710 comdlg32ocx
+
+# Try native DLL overrides
+export WINEDLLOVERRIDES="comdlg32=n,b;shell32=n,b"
+protontricks-launch --appid 513710 "/path/to/SCUM Admin Helper.exe"
+```
+
+**Option 6: Winetricks Fixes** (May help)
+Install additional Windows components that might improve file dialog support:
+
+```bash
+# Install native common dialogs (may help)
+protontricks 513710 comdlg32ocx
+
+# If that doesn't work, try these:
+protontricks 513710 allcodecs
+protontricks 513710 d3dcompiler_47
+```
+
+**Option 7: Virtual Desktop Mode** (Last resort)
+Running in a contained window sometimes helps with dialogs:
+
+Add to `scripts/sah-env.sh`:
+```bash
+export WINE_VIRTUAL_DESKTOP=SAH
+export WINE_VIRTUAL_DESKTOP_SIZE=1920x1080
+```
+
+Note: This creates a contained window and may affect usability but can enable some Windows features.
+
+**Quick Test After Fixes:**
+```bash
+# Kill SAH if running
+pkill -f "SCUM Admin Helper"
+
+# Relaunch SAH
+./scripts/sah-helper.sh
+# or use desktop shortcut
+
+# Test Import/Export buttons
+# They should now open file selection dialogs
+```
+
+**Default File Dialog Location:**
+When file dialogs are working, SAH uses the Wine Desktop folder as the default location:
+```
+/path/to/steamapps/compatdata/513710/pfx/drive_c/users/steamuser/Desktop/
+```
+
+Open this folder quickly with:
+```bash
+./scripts/open-sah-folder.sh
+```
+
+This is where exports are saved and where you should place files for importing.
+
+**Typical SAH File Locations:**
+
+```bash
+# Main SAH directory
+SCUM_Admin_Helper/
+
+# Config files
+SCUM_Admin_Helper/*.config
+
+# Exported data
+SCUM_Admin_Helper/Exports/
+
+# Command packages
+SCUM_Admin_Helper/Commands/
+
+# Logs
+SCUM_Admin_Helper/Logs/
+```
+
+**Finding Exported Files:**
+
+```bash
+# List recent exports
+find /mnt/ct2000/SteamLibrary/steamapps/compatdata/513710/pfx/drive_c/users/steamuser/AppData/Local/SCUM_Admin_Helper \
+  -type f -mtime -1 -name "*.json" -o -name "*.xml" -o -name "*.csv"
+
+# Copy exports to Downloads
+cp -v /mnt/ct2000/SteamLibrary/steamapps/compatdata/513710/pfx/drive_c/users/steamuser/AppData/Local/SCUM_Admin_Helper/*.json ~/Downloads/
+```
+
+**Pro Tip:** Keep a file manager bookmark to SAH's directory for quick access.
+
+### 11. Download Fails
 cd /tmp
 curl -L -o SAH_Setup.zip https://download.scumadminhelper.com/file/sah-storage/SAH_Setup.zip
 
@@ -393,7 +614,136 @@ EOF
 chmod +x ~/.local/share/applications/scum-admin-helper.desktop
 ```
 
-### 11. GUI Won't Start
+### 11. "DLL Not Verified" / .NET Assembly Errors
+
+**Symptoms:**
+- Error message: "DLL not verified" when launching SCUM
+- SAH launches but game shows DLL verification errors
+- .NET assembly errors in logs
+- Strong-name verification failures
+- Messages about corrupted assemblies
+
+**Example Error:**
+```
+Error: Assembly verification failed for [assembly name]
+Error: DLL not verified
+Strong name validation failed
+```
+
+**Cause:**
+This happens when .NET Framework 4.8 registry entries become corrupted or missing despite the framework appearing to be installed. This can occur due to:
+- Incomplete initial .NET installation
+- Wine/Proton updates that affect registry structure  
+- File system issues during installation
+- Conflicts between Wine-Mono and .NET Framework
+- Proton prefix corruption
+
+The .NET Framework package shows as installed (in `wine uninstaller`), but the registry paths required for assembly verification are missing or broken. This causes the Global Assembly Cache (GAC) to fail DLL verification checks.
+
+**Solutions:**
+
+**Option 1: Quick Fix with Helper Script** (Recommended)
+```bash
+# Use the automated reinstall script
+./scripts/reinstall-dotnet.sh
+```
+
+This script will:
+- Detect your SCUM installation
+- Backup current .NET installation status
+- Force-reinstall .NET Framework 4.8
+- Recreate all registry entries
+- Verify the fix worked
+- Test SAH launch
+
+**Option 2: Manual .NET Reinstallation**
+```bash
+# Force-reinstall .NET Framework 4.8
+protontricks 513710 --force dotnet48
+
+# This will:
+# - Remove existing .NET components (if broken)
+# - Download fresh .NET installers
+# - Install with proper registry entries
+# - Configure mscoree (runtime loader) overrides
+# - Verify all assemblies
+
+# Wait for completion (may take 5-10 minutes)
+# You'll see many "fixme:" messages - these are normal
+
+# Test if fixed
+./scripts/sah-helper.sh  # Launch SAH to test
+```
+
+**Option 3: Via GUI Helper**
+```bash
+./scripts/sah-helper.sh
+# → Troubleshooting → Reinstall .NET Framework
+```
+
+**Option 4: Complete .NET Cleanup and Reinstall** (If above doesn't work)
+```bash
+# 1. Backup SAH first
+./scripts/backup-sah.sh
+
+# 2. Remove all .NET components
+protontricks 513710 --uninstaller
+# In the GUI, uninstall all Microsoft .NET entries
+
+# 3. Clean up remaining .NET files
+rm -rf ~/.steam/steam/steamapps/compatdata/513710/pfx/drive_c/windows/Microsoft.NET/
+
+# 4. Reinstall fresh
+protontricks 513710 dotnet40
+protontricks 513710 dotnet48
+
+# 5. Test
+./scripts/sah-helper.sh
+```
+
+**Verification Steps:**
+
+After reinstalling, verify the fix:
+```bash
+# Check if .NET registry entries exist
+protontricks -c 'wine reg query "HKLM\\Software\\Microsoft\\.NETFramework\\v4.0.30319" /v InstallPath' 513710
+
+# Should show something like:
+# InstallPath    REG_SZ    C:\windows\Microsoft.NET\Framework\v4.0.30319\
+
+# Check if .NET is listed
+protontricks -c 'wine uninstaller --list' 513710 | grep -i "\.NET"
+
+# Should show:
+# {92FB6C44-E685-45AD-9B20-CADF4CABA132}|||Microsoft .NET Framework 4.8
+
+# Launch SAH to test
+./scripts/sah-helper.sh
+# Should launch without DLL verification errors
+```
+
+**Check Game Launch:**
+1. Launch SCUM from Steam
+2. No "DLL not verified" errors should appear
+3. Game should start normally
+4. If errors persist, try complete prefix rebuild (see Advanced Troubleshooting)
+
+**Why This Works:**
+- `--force` flag makes protontricks reinstall even if already present
+- Reinstallation recreates missing registry entries
+- Fresh install re-verifies all assemblies in GAC
+- mscoree native override ensures proper .NET runtime loading
+
+**Prevention:**
+- Avoid Wine/Proton version downgrades after .NET installation
+- Don't manually delete registry entries in the prefix
+- Keep backups: `./scripts/backup-sah.sh` (choose option 2 for full prefix)
+- After major Steam/Proton updates, verify .NET: `protontricks 513710 dotnet48`
+
+**If Still Failing:**
+The issue may be deeper prefix corruption. See "Reset Prefix" in Advanced Troubleshooting section.
+
+### 12. GUI Won't Start
 
 **Symptoms:**
 - `./scripts/sah-helper.sh` shows error

@@ -2,6 +2,177 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2024-12-26
+
+### Major Changes
+
+**Critical Fix: Proton vs Wine Launch Method**
+- **Fixed garbled graphics and missing settings** by switching all SAH launch methods from system Wine to Steam's Proton
+- All launch methods now use `protontricks-launch --appid 513710` instead of `wine` command
+- Ensures SAH runs in same environment as SCUM with proper .NET Framework and rendering
+- Affects: Test Launch, Manual Control, SCUM+SAH launcher, desktop shortcuts
+
+**Centralized Configuration System**
+- **New: `scripts/sah-env.sh`** - Central location for all environment variables and paths
+  - Exports: `SCUM_APPID`, `SCUM_COMPAT_PATH`, `SCUM_PREFIX`, `SAH_INSTALL_PATH`, `SAH_CONFIG_DIR`
+  - Dynamic path detection across all Steam library locations
+  - Sourced by all scripts for consistency
+  - Eliminates code duplication across scripts
+  
+### Added
+
+**New Scripts & Tools:**
+- **`scripts/fix-file-dialogs.sh`** - Enable SAH file import/export dialogs
+  - Sets Windows version to Windows 10 in Proton registry
+  - Fixes "Common File Dialog requires Windows Vista or later" errors
+  - Interactive with clear prompts and verification
+  
+- **`scripts/configure-sah-delays.sh`** - Optimize SAH chat delays for Linux
+  - Configures "Open Chat" delay for window focus compatibility
+  - Preset options: 1500ms, 2000ms (recommended), 2500ms, 3000ms, or custom
+  - Backs up config before changes
+  - Optional automatic SAH restart
+  
+- **`scripts/reinstall-dotnet.sh`** - Fix .NET DLL verification errors
+  - Force-reinstalls .NET Framework 4.8 to fix corrupted registry entries
+  - Addresses "DLL not verified" errors when launching SCUM
+  - Colored output with status indicators
+  - Pre/post verification of registry and installations
+  - Detailed logging to `/tmp/sah-reinstall-dotnet-*.log`
+  
+- **`scripts/open-sah-folder.sh`** - Quick access to SAH directory
+  - Opens Wine Desktop folder (default file dialog location)
+  - Supports multiple file managers (xdg-open, dolphin, nautilus, thunar)
+  - Workaround for file import/export when dialogs don't work
+  
+- **`scripts/cleanup-wine-prefix.sh`** - Remove unnecessary Windows components
+  - Cleans up components from old file dialog fix attempts
+  - Removes comdlg32ocx, DLL overrides (no longer needed)
+  - Keeps essential components (Windows version, .NET Framework)
+
+**Documentation:**
+- **`WINE-VS-PROTON-FIX.md`** - Technical documentation of Wine vs Proton issue
+  - Root cause analysis and solution
+  - Before/after comparisons
+  - Files modified and why
+  
+- **`docs/dll-verification-issue.md`** - Comprehensive .NET Framework troubleshooting guide
+  - Root cause of DLL verification errors
+  - Why registry corruption occurs
+  - Prevention best practices
+  - Long-term considerations
+
+**GUI Improvements:**
+- **Reorganized main menu** - Better grouping and workflow
+  - "Launch SCUM + SAH" moved to top (primary action)
+  - New "Advanced Tools" submenu (shortcuts, dialogs, delays, video removal)
+  - New "System & Maintenance" submenu (backups, logs, troubleshooting)
+  - Status now shows detailed output from `status-sah.sh --detailed`
+  
+- **Enhanced Troubleshooting menu** - Interactive options
+  - "Reinstall .NET" - One-click fix for DLL errors
+  - "View Logs" - Quick access to error logs
+  - "Test Installation" - Verify all components
+  - Links to external scripts with terminal launch
+  
+- **Improved status checks** - More reliable and faster
+  - Uses glob patterns instead of find for speed
+  - Better process detection
+  - Clearer status messages
+
+### Changed
+
+**Script Updates:**
+- **`scripts/install-sah.sh`** - Now sources `sah-env.sh` for paths
+- **`scripts/status-sah.sh`** - Added `--detailed` flag with configuration info
+  - Shows Windows version setting (file dialog compatibility)
+  - Shows SAH delay settings with profile categorization
+  - Shows .NET Framework status and version
+  - Shows SAH installation details (size, date)
+  - Shows SCUM installation and intro video status
+  
+- **`scripts/sah-helper.sh`** - Major GUI overhaul
+  - 5 launch locations changed from Wine to Proton
+  - Removed WINEPREFIX export (uses protontricks instead)
+  - Added watchdog feature for SCUM+SAH launch
+  - Better error handling and user feedback
+  - Shellcheck compliance improvements (quote variables, use local)
+
+### Fixed
+
+**Critical Bugs:**
+- Garbled graphics when launching SAH (Wine vs Proton environment mismatch)
+- Settings and registration key not persisting between launches
+- File dialogs not working (missing Windows version configuration)
+- "DLL not verified" errors after SAH installation (.NET registry corruption)
+
+**User Experience:**
+- Default prompts now match common use case (Y for continue instead of N)
+- Scripts provide clear feedback and next steps
+- Better terminal output formatting
+- More helpful error messages with actionable solutions
+
+### Technical Details
+
+**Environment Variables:**
+- Removed problematic GL variables that caused issues:
+  - `LIBGL_ALWAYS_SOFTWARE=1` (forced software rendering)
+  - `__GL_SYNC_TO_VBLANK=0`, `MESA_GL_VERSION_OVERRIDE`, etc.
+- Kept: `WINEDEBUG=-all,err+all` (reduces log spam)
+- Added: `WINE_WINDOWS_VERSION="win10"` (file dialog compatibility)
+
+**Code Quality:**
+- Better error handling across all scripts
+- Consistent use of exit codes
+- More robust path detection
+- Improved logging and debugging
+
+### Documentation Improvements
+
+**README.md:**
+- Added "Why Proton?" section explaining protontricks requirement
+- Updated script list with all new tools
+- Added file dialog workaround section
+- Clarified dependencies and installation requirements
+
+**docs/FAQ.md:**
+- New section: "How do I use SAH commands effectively on Linux?"
+  - Explains window focus behavior differences
+  - Recommends delay configuration
+  - Provides usage workflow
+
+**docs/installation.md:**
+- Clarified protontricks is required (not optional)
+- Emphasized Proton vs Wine distinction
+
+**docs/troubleshooting.md:**
+- **Section 8**: Garbled Graphics / Missing UI Elements (Wine vs Proton)
+- **Section 10**: File Dialogs Don't Work (extensive workarounds)
+- **Section 11**: DLL Not Verified / .NET Assembly Errors (comprehensive fix)
+
+### Breaking Changes
+
+None - all changes are backward compatible. Existing installations will continue to work.
+
+### Migration Notes
+
+If upgrading from previous version:
+1. No action required - new scripts are additions
+2. Existing launch methods will use new Proton-based approach automatically
+3. If experiencing graphics issues, kill SAH and relaunch via GUI or desktop shortcut
+4. If experiencing DLL errors, run `./scripts/reinstall-dotnet.sh`
+
+### Development
+
+**New Files:**
+- `bridge/FakeSCUM.cs` - Development tool for testing SAH command interception (experimental)
+
+**Repository:**
+- All changes committed to main branch
+- Ready for v1.1.0 release tag
+
+---
+
 ## [1.0.2] - 2024-12-21
 
 ### Added

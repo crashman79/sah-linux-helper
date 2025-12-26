@@ -31,6 +31,9 @@ The installer creates:
 - **SCUM Run Once**: Must be launched at least once (creates Proton prefix)
 - **Python**: 3.x (usually pre-installed)
 - **Internet**: Required for downloading SAH (~110MB)
+- **protontricks**: Required for launching SAH with Steam's Proton (ensures proper rendering)
+
+**Note:** SAH uses `protontricks-launch` to run with Steam's Proton runtime, NOT system Wine. This ensures proper graphics rendering and settings persistence.
 
 ## Installation Methods
 

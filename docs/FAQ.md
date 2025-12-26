@@ -103,6 +103,35 @@ Yes. That's the normal usage pattern:
 4. Play while SAH manages server
 5. Close both when done
 
+### How do I use SAH commands effectively on Linux?
+
+**Recommended SAH Configuration for Linux:**
+
+1. **Increase "Open Chat" delay** (in SAH settings or use our script):
+   - Recommended: **2000ms (2 seconds)** or higher
+   - Default is often too fast for Linux window management
+   
+   **Quick setup with script:**
+   ```bash
+   ./scripts/configure-sah-delays.sh
+   ```
+   
+   Or manually in SAH: Settings → Spawning → Open Chat Delay → 2000
+
+2. **Workflow when executing commands**:
+   - Click command in SAH (e.g., "Teleport", "Give Item")
+   - **Immediately switch back to SCUM** (Alt+Tab or click SCUM window)
+   - SAH will open SCUM's chat automatically after the delay
+   - Command executes in focused SCUM window
+
+**Why this is needed on Linux:**
+- Window focus behavior differs between Windows and Linux
+- Linux window managers may not focus SCUM automatically
+- The delay gives you time to manually switch focus
+- Ensures commands execute in the correct window
+
+**Tip:** Test with a harmless command first to find the right delay for your system.
+
 ## Technical Questions
 
 ### Which Proton version is used?

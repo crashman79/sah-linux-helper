@@ -151,8 +151,8 @@ fi
 echo "✓ Found Proton prefix at: $COMPAT_PATH"
 echo
 
-# SAH installation path in Windows prefix
-SAH_INSTALL_PATH="$COMPAT_PATH/pfx/drive_c/users/steamuser/AppData/Local/SCUM_Admin_Helper"
+# Source environment to get SAH_INSTALL_PATH
+source "$(dirname "$0")/sah-env.sh"
 SAH_EXE="$SAH_INSTALL_PATH/SCUM Admin Helper.exe"
 
 # Check if SAH is already installed
