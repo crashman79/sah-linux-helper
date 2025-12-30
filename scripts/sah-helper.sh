@@ -256,54 +256,143 @@ EOF
             cat > "$launcher_script" << EOFSCRIPT
 #!/bin/bash
 # Launch SCUM and SAH together with watchdog
+# This script starts SCUM, waits for it to initialize, then launches SAH
+# The watchdog monitors SCUM and offers to close SAH when SCUM exits
 
 SCUM_APPID=513710
 SAH_PREFIX=""
 SAH_EXE=""
 SAH_ENV_PATH="$SCRIPT_DIR/sah-env.sh"
 
+echo "========================================"
+echo "SCUM + Admin Helper Launcher with Watchdog"
+echo "========================================"
+echo
+
 # Find SAH
+echo "Searching for SCUM Admin Helper..."
 for lib in ~/.steam/steam ~/.local/share/Steam /mnt/*/SteamLibrary /mnt/*/*/SteamLibrary; do
     test_exe="\\\$lib/steamapps/compatdata/\\\$SCUM_APPID/pfx/drive_c/users/steamuser/AppData/Local/SCUM_Admin_Helper/SCUM Admin Helper.exe"
     if [ -f "\\\$test_exe" ]; then
         SAH_EXE="\\\$test_exe"
         SAH_PREFIX="\\\$lib/steamapps/compatdata/\\\$SCUM_APPID/pfx"
+        echo "✓ Found SAH at: \\\$SAH_EXE"
         break
     fi
 done
 
-# Launch SCUM via Steam
-steam steam://rungameid/\\\$SCUM_APPID &
+# Verify SAH was found
+if [ -z "\\\$SAH_EXE" ]; then
+    echo "✗ ERROR: SCUM Admin Helper not found"
+    echo "Please run installation first: ./scripts/install-sah.sh"
+    exit 1
+fi
 
-# Wait for SCUM to start
-sleep 10
-while ! pgrep -f "SCUM.exe" > /dev/null 2>&1; do
-    sleep 2
+echo
+
+# Check if SCUM is already running
+echo "Checking if SCUM is running..."
+if pgrep -f "SCUM.exe" > /dev/null 2>&1; then
+    echo "✓ SCUM is already running"
+else
+    # Launch SCUM via Steam
+    echo "Launching SCUM via Steam..."
+    steam steam://rungameid/\\\$SCUM_APPID > /tmp/scum-launcher.log 2>&1 &
+    
+    # Wait for SCUM process to appear (up to 30 seconds)
+    echo "Waiting for SCUM to start..."
+    SCUM_WAIT=0
+    while ! pgrep -f "SCUM.exe" > /dev/null 2>&1 && [ \\\$SCUM_WAIT -lt 30 ]; do
+        sleep 1
+        SCUM_WAIT=\\\$((SCUM_WAIT + 1))
+    done
+    
+    if ! pgrep -f "SCUM.exe" > /dev/null 2>&1; then
+        echo "✗ ERROR: SCUM failed to start within 30 seconds"
+        echo "Check /tmp/scum-launcher.log for details"
+        exit 1
+    fi
+    echo "✓ SCUM process detected"
+fi
+
+# CRITICAL: Give SCUM's Wine prefix adequate time to fully initialize
+# The Wine environment needs to set up the prefix, initialize graphics, load assets, etc.
+# Too short a delay will cause SAH to fail silently
+echo
+echo "Initializing SCUM Wine environment..."
+echo "This may take 15-30 seconds..."
+for i in {15..1}; do
+    echo -n "."
+    sleep 1
 done
+echo
+echo "✓ Ready to launch SAH"
+echo
 
-# Launch SAH with Proton (Steam's Wine)
-# Source environment settings
+# Load environment settings
 if [ -f "\\\$SAH_ENV_PATH" ]; then
+    echo "Loading environment settings..."
     source "\\\$SAH_ENV_PATH"
 fi
 
-protontricks-launch --appid \\\$SCUM_APPID "\\\$SAH_EXE" &
+# Launch SAH
+echo "Launching SCUM Admin Helper..."
+protontricks-launch --appid \\\$SCUM_APPID "\\\$SAH_EXE" > /tmp/sah-launch.log 2>&1 &
+SAH_PID=\\\$!
+echo "Launched with PID: \\\$SAH_PID"
+echo
 
-# Wait for SAH to start
-sleep 5
+# Wait for SAH process to appear (up to 10 seconds)
+echo "Waiting for SAH to start..."
+SAH_WAIT=0
+while ! pgrep -f "SCUM Admin Helper.exe" > /dev/null 2>&1 && [ \\\$SAH_WAIT -lt 10 ]; do
+    sleep 1
+    SAH_WAIT=\\\$((SAH_WAIT + 1))
+done
+
+# Check if SAH started
+if pgrep -f "SCUM Admin Helper.exe" > /dev/null 2>&1; then
+    echo "✓ SCUM Admin Helper started successfully!"
+    echo
+else
+    echo "✗ Failed to start SCUM Admin Helper"
+    if [ -f /tmp/sah-launch.log ] && [ -s /tmp/sah-launch.log ]; then
+        echo "Error details:"
+        cat /tmp/sah-launch.log
+    fi
+    exit 1
+fi
 
 # Monitor SCUM and offer to close SAH when SCUM exits
+echo "Monitoring SCUM process..."
 while pgrep -f "SCUM.exe" > /dev/null 2>&1; do
     sleep 5
 done
 
-# SCUM closed, check if SAH is still running
+echo
+echo "SCUM has closed"
+echo
+
+# Check if SAH is still running
 if pgrep -f "SCUM Admin Helper.exe" > /dev/null 2>&1; then
     if zenity --question --title="SCUM Admin Helper Watchdog" \\
-        --text="SCUM has closed\\\\n\\\\nSCUM Admin Helper is still running.\\\\nClose it now?" \\
-        --width=400 --timeout=30 2>/dev/null; then
+        --text="<b>SCUM has closed</b>\\n\\nSCUM Admin Helper is still running.\\nThis may cause Steam to show SCUM as 'Running'.\\n\\nClose SCUM Admin Helper now?" \\
+        --width=450 --timeout=30 2>/dev/null; then
+        echo "Closing SCUM Admin Helper..."
         pkill -f "SCUM Admin Helper.exe"
+        sleep 1
+        
+        if pgrep -f "SCUM Admin Helper.exe" > /dev/null 2>&1; then
+            echo "WARNING: SAH may still be running, trying force kill..."
+            pkill -9 -f "SCUM Admin Helper.exe"
+        else
+            echo "✓ SCUM Admin Helper closed successfully"
+        fi
+    else
+        echo "User chose to keep SAH running"
     fi
+else
+    echo "SAH already closed"
 fi
 EOFSCRIPT
 EOFSCRIPT
@@ -534,13 +623,14 @@ launch_scum_and_sah() {
         show_working "Launching" "Starting SCUM via Steam..."
         
         # Launch SCUM via Steam
-        steam steam://rungameid/$SCUM_APPID &
+        steam steam://rungameid/$SCUM_APPID > /tmp/scum-launch.log 2>&1 &
+        SCUM_LAUNCH_PID=$!
         
-        # Wait for SCUM to start
+        # Wait for SCUM process to appear (up to 30 seconds)
         local wait_count=0
         while [ $wait_count -lt 30 ]; do
             if pgrep -f "SCUM.exe" > /dev/null 2>&1; then
-                log "SCUM started successfully"
+                log "SCUM process detected, waiting for full initialization..."
                 break
             fi
             sleep 1
@@ -549,13 +639,36 @@ launch_scum_and_sah() {
         
         if [ $wait_count -ge 30 ]; then
             close_working
-            show_error "✗ SCUM failed to start within 30 seconds.\n\nPlease start SCUM manually from Steam."
+            log "ERROR: SCUM failed to start within 30 seconds"
+            show_error "✗ SCUM failed to start within 30 seconds.\n\nPlease check:\n• Steam is running\n• SCUM is installed\n• You have permissions to run it"
             return 1
         fi
         
-        # Give SCUM a moment to initialize
-        sleep 2
+        # CRITICAL: Give SCUM's Wine prefix ample time to fully initialize
+        # This is essential for SAH to launch successfully
+        # The Wine environment needs to:
+        # - Initialize the prefix
+        # - Mount file systems
+        # - Initialize graphics/audio
+        # - Load game assets
+        log "Initializing SCUM Wine environment (critical step)..."
+        show_working "Initializing" "Setting up SCUM Wine environment...\n\nThis may take 15-30 seconds"
+        
+        # Use adaptive waiting - keep checking if SCUM is responsive
+        local init_count=0
+        local max_init_wait=30
+        while [ $init_count -lt $max_init_wait ]; do
+            if [ $init_count -ge 15 ]; then
+                # After 15 seconds, we're good to try SAH
+                log "SCUM initialization window complete, SAH should launch now"
+                break
+            fi
+            sleep 1
+            ((init_count++))
+        done
+        
         close_working
+        log "SCUM ready, proceeding to launch SAH"
     else
         log "SCUM is already running"
     fi
@@ -581,22 +694,71 @@ launch_scum_and_sah() {
             log "Found SAH at: $sah_exe"
             log "Using WINEPREFIX: $wine_prefix"
             
-            # Launch SAH with Proton (Steam's Wine)
-            source "$SCRIPT_DIR/sah-env.sh"
-            protontricks-launch --appid $SCUM_APPID "$sah_exe" > /tmp/sah-launch.log 2>&1 &
-            sleep 5
+            # Source environment settings
+            log "Loading SAH environment settings..."
+            if ! source "$SCRIPT_DIR/sah-env.sh" 2>/tmp/sah-env-error.log; then
+                log "WARNING: Error loading sah-env.sh, continuing anyway"
+            fi
             
-            if pgrep -f "SCUM Admin Helper.exe" > /dev/null 2>&1; then
+            # Launch SAH with Proton (Steam's Wine)
+            log "Executing: protontricks-launch --appid $SCUM_APPID \"$sah_exe\""
+            show_working "Launching" "Starting SCUM Admin Helper..."
+            
+            protontricks-launch --appid $SCUM_APPID "$sah_exe" > /tmp/sah-launch.log 2>&1 &
+            SAH_LAUNCH_PID=$!
+            log "Launched SAH with PID: $SAH_LAUNCH_PID"
+            
+            # Wait up to 10 seconds for SAH process to appear
+            local sah_wait_count=0
+            local sah_found=0
+            while [ $sah_wait_count -lt 10 ]; do
+                if pgrep -f "SCUM Admin Helper.exe" > /dev/null 2>&1; then
+                    log "SAH process detected!"
+                    sah_found=1
+                    break
+                fi
+                log "Waiting for SAH... ($sah_wait_count/10 seconds)"
+                sleep 1
+                ((sah_wait_count++))
+            done
+            
+            if [ $sah_found -eq 1 ]; then
                 close_working
                 log "SAH started successfully"
                 show_info "✓ SCUM and SAH launched successfully!\n\nSCUM Admin Helper is now running.\n\nWatchdog will monitor SCUM and offer to close SAH when SCUM exits."
                 
                 # Start watchdog in background
                 start_watchdog &
+                return 0
             else
                 close_working
-                log "ERROR: Failed to start SAH"
-                show_error "✗ Failed to start SCUM Admin Helper\n\nCheck error log:\n/tmp/sah-launch.log"
+                log "ERROR: SAH process not detected after launch attempt"
+                
+                # Check if protontricks-launch had an error
+                if [ -f /tmp/sah-launch.log ] && [ -s /tmp/sah-launch.log ]; then
+                    log "Launch log contents:"
+                    log "$(cat /tmp/sah-launch.log)"
+                    show_error "✗ Failed to start SCUM Admin Helper\n\nLaunch failed - check /tmp/sah-launch.log\n\nCommon causes:\n• .NET Framework not installed\n• Proton/Wine initialization incomplete\n• SAH exe missing or corrupted\n\nTry: ./scripts/reinstall-dotnet.sh"
+                else
+                    # No error log, which is strange
+                    log "No error log generated - may be a process detection issue"
+                    
+                    # Try one more check with longer timeout
+                    log "Attempting extended wait (5 more seconds)..."
+                    local extended_wait=5
+                    while [ $extended_wait -gt 0 ]; do
+                        if pgrep -f "SCUM Admin Helper.exe" > /dev/null 2>&1; then
+                            log "SAH found on extended wait!"
+                            show_info "✓ SCUM and SAH launched successfully!\n\nSCUM Admin Helper is now running.\n\nWatchdog will monitor SCUM and offer to close SAH when SCUM exits."
+                            start_watchdog &
+                            return 0
+                        fi
+                        sleep 1
+                        ((extended_wait--))
+                    done
+                    
+                    show_error "✗ Failed to start SCUM Admin Helper\n\nNo output or error details.\n\nTroubleshooting steps:\n1. Verify .NET is installed: ./scripts/reinstall-dotnet.sh\n2. Test manual launch: protontricks-launch --appid 513710 [exe path]\n3. Check: ~/.steam/steam/steamapps/compatdata/513710/pfx/ exists"
+                fi
                 return 1
             fi
         else
