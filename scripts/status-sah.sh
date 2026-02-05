@@ -63,30 +63,46 @@ if [ "$DETAILED" = true ]; then
         WINEPREFIX="$COMPAT_PATH/pfx"
         export WINEPREFIX
         
-        # Check Windows version setting (directly from user.reg for Proton)
+        # Check Windows version setting (registry and environment)
         USER_REG="$COMPAT_PATH/pfx/user.reg"
-        WIN_VERSION=""
+        WIN_VERSION_REG=""
+        WIN_VERSION_ENV=""
+        
+        # Check if set in base [Software\Wine] section (not AppDefaults)
         if [ -f "$USER_REG" ]; then
-            # Look for Version="win10" in the registry file
-            if grep -q '"Version"="win10"' "$USER_REG" 2>/dev/null; then
-                WIN_VERSION="win10"
-            else
-                # Check what version is set
-                WIN_VERSION=$(grep -oP '"Version"="\K[^"]+' "$USER_REG" 2>/dev/null | head -1)
-            fi
+            # Look for Version in the base Wine section (between [Software\Wine] and next section)
+            WIN_VERSION_REG=$(awk '/^\[Software\\\\Wine\]$/{flag=1;next}/^\[/{flag=0}flag && /"Version"=/{print;exit}' "$USER_REG" | grep -oP '"Version"="\K[^"]+' 2>/dev/null)
         fi
         
-        if [ "$WIN_VERSION" = "win10" ]; then
-            echo "  Windows Version: $WIN_VERSION"
-            echo "    ✓ Set to Windows 10 (file dialogs enabled)"
-        elif [ -n "$WIN_VERSION" ]; then
-            echo "  Windows Version: $WIN_VERSION"
-            echo "    ⚠ Not set to Windows 10 (file dialogs may not work)"
-            echo "      Run: ./scripts/fix-file-dialogs.sh"
+        # Check sah-env.sh for environment variable setting
+        SAH_ENV="$(dirname "$0")/sah-env.sh"
+        if [ -f "$SAH_ENV" ]; then
+            WIN_VERSION_ENV=$(grep '^export WINE_WINDOWS_VERSION=' "$SAH_ENV" | grep -oP '"\K[^"]+' 2>/dev/null)
+        fi
+        
+        # Determine effective version
+        if [ -n "$WIN_VERSION_REG" ]; then
+            if [ "$WIN_VERSION_REG" = "win10" ]; then
+                echo "  Windows Version: win10 (registry)"
+                echo "    ✓ Set to Windows 10 in registry (file dialogs enabled)"
+            else
+                echo "  Windows Version: $WIN_VERSION_REG (registry)"
+                echo "    ⚠ Not set to Windows 10 (file dialogs may not work)"
+                echo "      Run: ./scripts/fix-file-dialogs.sh"
+            fi
+        elif [ -n "$WIN_VERSION_ENV" ]; then
+            if [ "$WIN_VERSION_ENV" = "win10" ]; then
+                echo "  Windows Version: win10 (environment)"
+                echo "    ✓ Set via WINE_WINDOWS_VERSION (file dialogs enabled)"
+            else
+                echo "  Windows Version: $WIN_VERSION_ENV (environment)"
+                echo "    ⚠ Not set to Windows 10 (file dialogs may not work)"
+                echo "      Run: ./scripts/fix-file-dialogs.sh"
+            fi
         else
-            echo "  Windows Version: Default (not explicitly set)"
-            echo "    ⚠ File dialogs may not work"
-            echo "      Run: ./scripts/fix-file-dialogs.sh"
+            echo "  Windows Version: Default (Proton/Wine default)"
+            echo "    ℹ File dialogs may work with Proton's defaults"
+            echo "      If dialogs don't work, run: ./scripts/fix-file-dialogs.sh"
         fi
         echo
         

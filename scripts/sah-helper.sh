@@ -22,6 +22,13 @@ if ! command -v zenity &> /dev/null; then
     exit 1
 fi
 
+# Require a display (X11 or Wayland)
+if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    echo "ERROR: No display found. DISPLAY and WAYLAND_DISPLAY are unset." >&2
+    echo "Run this script from a terminal inside your graphical session (not over SSH without -X)." >&2
+    exit 1
+fi
+
 log "SCUM Admin Helper GUI started"
 
 # Function to show info dialog
@@ -36,22 +43,36 @@ show_error() {
 
 # Function to show question dialog
 ask_question() {
-    zenity --question --title="SCUM Admin Helper" --text="$1" --width=400 --no-wrap 2>/dev/null
+    zenity --question --title="SCUM Admin Helper" --text="$1" --width=400 --no-wrap --ok-label="Yes" --cancel-label="No" 2>/dev/null
 }
 
 # Function to show a brief working notification
+# First call runs zenity without hiding stderr so display/GTK errors are visible
 show_working() {
     local title="${1:-Working}"
     local message="${2:-Please wait...}"
-    (
-        echo "0"
-        echo "# $message"
-        while true; do
-            sleep 0.2
+    if [ -z "${ZENITY_STDERR_SHOWN:-}" ]; then
+        (
+            echo "0"
             echo "# $message"
-        done
-    ) | zenity --progress --title="$title" --pulsate --auto-close --no-cancel --width=300 2>/dev/null &
-    WORKING_PID=$!
+            while true; do
+                sleep 0.2
+                echo "# $message"
+            done
+        ) | zenity --progress --title="$title" --pulsate --auto-close --no-cancel --width=300 2>&1 &
+        WORKING_PID=$!
+        ZENITY_STDERR_SHOWN=1
+    else
+        (
+            echo "0"
+            echo "# $message"
+            while true; do
+                sleep 0.2
+                echo "# $message"
+            done
+        ) | zenity --progress --title="$title" --pulsate --auto-close --no-cancel --width=300 2>/dev/null &
+        WORKING_PID=$!
+    fi
 }
 
 # Function to close working dialog
@@ -225,7 +246,8 @@ create_desktop_shortcut() {
         --column="Type" --column="Description" \
         "SAH Only" "Launch only SCUM Admin Helper" \
         "SCUM + SAH" "Launch SCUM and SAH together with watchdog" \
-        "Cancel" "Go back" 2>/dev/null)
+        "Cancel" "Go back" \
+        --cancel-label="Back" 2>/dev/null)
     
     case "$shortcut_type" in
         "SAH Only")
@@ -420,6 +442,81 @@ EOF
     esac
 }
 
+# Function to create desktop launcher for this GUI
+create_gui_launcher() {
+    log "User selected: GUI Launcher options"
+
+    local desktop_file="$HOME/.local/share/applications/sah-helper-gui.desktop"
+    local script_path="$SCRIPT_DIR/sah-helper.sh"
+    local action
+
+    mkdir -p "$HOME/.local/share/applications"
+
+    if [ -f "$desktop_file" ]; then
+        action=$(zenity --list --title="GUI Launcher" --width=500 --height=280 \
+            --text="A launcher already exists. Choose an action:" \
+            --column="Action" --column="Description" \
+            "Reinstall" "Rewrite launcher entry" \
+            "Remove" "Delete launcher from menu" \
+            "Cancel" "Do nothing" \
+            --cancel-label="Close" 2>/dev/null)
+    else
+        action=$(zenity --list --title="GUI Launcher" --width=500 --height=240 \
+            --text="Install the SCUM Admin Helper GUI launcher to your application menu." \
+            --column="Action" --column="Description" \
+            "Install" "Add launcher entry" \
+            "Cancel" "Do nothing" \
+            --cancel-label="Close" 2>/dev/null)
+    fi
+
+    case "$action" in
+        "Install"|"Reinstall")
+            # Ensure the GUI script is executable
+            if [ ! -x "$script_path" ]; then
+                chmod +x "$script_path" 2>/dev/null
+            fi
+
+            cat > "$desktop_file" << EOF
+[Desktop Entry]
+Version=1.0
+Name=SCUM Admin Helper Manager
+Comment=Launch the SCUM Admin Helper GUI
+Exec=$script_path
+Path=$(dirname "$script_path")
+Icon=applications-system
+Terminal=false
+Type=Application
+Categories=Utility;Game;
+EOF
+
+            chmod +x "$desktop_file"
+
+            if command -v update-desktop-database > /dev/null 2>&1; then
+                update-desktop-database "$HOME/.local/share/applications" > /dev/null 2>&1
+            fi
+
+            show_info "✓ GUI launcher ready!\n\nFind it in your application menu as:\nSCUM Admin Helper Manager\n\nDesktop file:\n$desktop_file"
+            log "GUI desktop launcher created/updated at $desktop_file"
+            ;;
+        "Remove")
+            if [ -f "$desktop_file" ]; then
+                rm -f "$desktop_file" 2>/dev/null
+                if command -v update-desktop-database > /dev/null 2>&1; then
+                    update-desktop-database "$HOME/.local/share/applications" > /dev/null 2>&1
+                fi
+                show_info "Launcher removed from application menu."
+                log "GUI desktop launcher removed"
+            else
+                show_info "No launcher found to remove."
+                log "No GUI desktop launcher present"
+            fi
+            ;;
+        *)
+            log "GUI launcher action cancelled"
+            ;;
+    esac
+}
+
 # Function to show desktop shortcut info
 show_desktop_info() {
     log "User selected: Desktop Shortcut Info"
@@ -514,13 +611,14 @@ manual_control() {
     close_working 2>/dev/null
     
     local choice
-    choice=$(zenity --list --title="Manual Control" --width=400 --height=300 \
+    choice=$(zenity --list --title="Manual Control" --width=550 --height=350 \
         --text="Select an action:" \
         --column="Action" --column="Description" \
         "Launch SAH" "Start SCUM Admin Helper" \
         "Stop SAH" "Close SCUM Admin Helper" \
         "Status" "Check running processes" \
-        "Back" "Return to main menu" 2>/dev/null)
+        "Back" "Return to main menu" \
+        --cancel-label="Back" 2>/dev/null)
     
     case "$choice" in
         "Launch SAH")
@@ -801,7 +899,7 @@ start_watchdog() {
         # Prompt user to close SAH
         if zenity --question --title="SCUM Admin Helper Watchdog" \
             --text="<b>SCUM has closed</b>\n\nSCUM Admin Helper is still running.\nThis may cause Steam to show SCUM as 'Running'.\n\nClose SCUM Admin Helper now?" \
-            --width=400 --timeout=30 2>/dev/null; then
+            --width=400 --timeout=30 --ok-label="Close SAH" --cancel-label="Keep Running" 2>/dev/null; then
             
             log "Watchdog: User chose to close SAH"
             pkill -f "SCUM Admin Helper.exe" 2>/dev/null
@@ -850,7 +948,8 @@ view_logs() {
     local selected
     selected=$(zenity --list --title="View Logs" --width=500 --height=300 \
         --checklist --column="View" --column="File" --column="Description" \
-        "${log_files[@]}" 2>/dev/null)
+        "${log_files[@]}" \
+        --cancel-label="Close" 2>/dev/null)
     
     if [ -n "$selected" ]; then
         # Open selected logs in default text editor
@@ -891,14 +990,15 @@ manage_backups() {
     fi
     
     local choice
-    choice=$(zenity --list --title="Backup Management" --width=450 --height=350 \
+    choice=$(zenity --list --title="Backup Management" --width=550 --height=400 \
         --text="Manage SCUM Admin Helper backups:\n\nSCUM Prefix: $compat_path" \
         --column="Action" --column="Description" \
         "Create Backup" "Create new backup" \
         "List Backups" "View existing backups" \
         "Restore Backup" "Restore from backup" \
         "Delete Backups" "Remove old backups" \
-        "Back" "Return to main menu" 2>/dev/null)
+        "Back" "Return to main menu" \
+        --cancel-label="Back" 2>/dev/null)
     
     case "$choice" in
         "Create Backup")
@@ -921,11 +1021,12 @@ create_backup() {
     local compat_path="$1"
     
     local backup_type
-    backup_type=$(zenity --list --title="Backup Type" --width=450 --height=250 \
+    backup_type=$(zenity --list --title="Backup Type" --width=550 --height=260 \
         --text="Select backup type:" \
         --column="Type" --column="Size" --column="Description" \
         "SAH Only" "~100MB" "SAH app + settings + .NET info" \
-        "Full Prefix" "~2-5GB" "Everything (SAH + .NET + all prefix data)" 2>/dev/null)
+        "Full Prefix" "~2-5GB" "Everything (SAH + .NET + all prefix data)" \
+        --cancel-label="Back" 2>/dev/null)
     
     if [ -z "$backup_type" ]; then
         return 0
@@ -1058,7 +1159,8 @@ list_backups() {
     selected=$(zenity --list --title="Available Backups" --width=700 --height=400 \
         --text="Found $backup_count backup(s):\n" \
         --checklist --column="View" --column="Backup Name" --column="Type" --column="Size" --column="Date" \
-        "${backup_list[@]}" 2>/dev/null)
+        "${backup_list[@]}" \
+        --cancel-label="Back" 2>/dev/null)
     
     if [ -n "$selected" ]; then
         # Show details for selected backup
@@ -1113,7 +1215,8 @@ restore_backup() {
     selected=$(zenity --list --title="Restore Backup" --width=600 --height=400 \
         --text="Select backup to restore:\n⚠ This will overwrite current installation!" \
         --column="Backup Name" --column="Details" \
-        "${backup_list[@]}" 2>/dev/null)
+        "${backup_list[@]}" \
+        --cancel-label="Back" 2>/dev/null)
     
     if [ -z "$selected" ]; then
         return 0
@@ -1224,7 +1327,8 @@ delete_backups() {
     selected=$(zenity --list --title="Delete Backups" --width=600 --height=400 \
         --text="Select backups to delete:\n⚠ This action cannot be undone!" \
         --checklist --column="Delete" --column="Backup Name" --column="Type" --column="Size" \
-        "${backup_list[@]}" 2>/dev/null)
+        "${backup_list[@]}" \
+        --cancel-label="Back" 2>/dev/null)
     
     if [ -z "$selected" ]; then
         return 0
@@ -1304,7 +1408,8 @@ These videos only play once and can be safely removed.
 
 <b>Note:</b> Steam may re-download when verifying files.
 
-Would you like to remove them now?" 2>/dev/null; then
+Would you like to remove them now?" \
+        --ok-label="Remove Videos" --cancel-label="Keep Videos" 2>/dev/null; then
         log "User accepted video removal offer"
         remove_scum_videos
     else
@@ -1378,14 +1483,14 @@ show_troubleshooting() {
     close_working 2>/dev/null
     
     # Show troubleshooting menu with actions
-    local choice=$(zenity --list --title="Troubleshooting" --width=700 --height=500 \
+    local choice=$(zenity --list --title="Troubleshooting" --width=650 --height=400 \
         --column="Option" --column="Description" \
         "View Guide" "Show common issues and solutions" \
         "Reinstall .NET" "Fix 'DLL not verified' errors" \
         "View Logs" "Check installation and launch logs" \
         "Test Installation" "Verify SAH components" \
         "Back" "Return to main menu" \
-        2>/dev/null)
+        --cancel-label="Back" 2>/dev/null)
     
     case "$choice" in
         "View Guide")
@@ -1434,7 +1539,8 @@ See docs/troubleshooting.md" 2>/dev/null
             ;;
         "Reinstall .NET")
             if zenity --question --title="Reinstall .NET Framework" --width=500 \
-                --text="This will force-reinstall .NET Framework 4.8 in SCUM's Proton prefix.\n\nThis fixes:\n• 'DLL not verified' errors\n• .NET assembly verification failures\n• Corrupted registry entries\n\nThe process takes 5-10 minutes.\n\nProceed?" 2>/dev/null; then
+                --text="This will force-reinstall .NET Framework 4.8 in SCUM's Proton prefix.\n\nThis fixes:\n• 'DLL not verified' errors\n• .NET assembly verification failures\n• Corrupted registry entries\n\nThe process takes 5-10 minutes.\n\nProceed?" \
+                --ok-label="Reinstall" --cancel-label="Cancel" 2>/dev/null; then
                 
                 # Launch terminal with the reinstall script
                 if command -v konsole &> /dev/null; then
@@ -1471,15 +1577,17 @@ advanced_tools() {
     while true; do
         local choice
         choice=$(zenity --list --title="Advanced Tools" \
-            --width=550 --height=400 \
+            --width=550 --height=450 \
             --text="<b>Advanced Configuration & Optimization</b>\n" \
             --column="Tool" --column="Description" \
             "Configure SAH Delays" "Optimize chat delays for Linux" \
             "Fix File Dialogs" "Enable import/export dialogs" \
             "Open SAH Folder" "Access import/export location" \
             "Create Desktop Shortcut" "Add desktop launcher" \
+            "Install GUI Launcher" "Add the zenity GUI to application menu" \
             "Remove SCUM Videos" "Skip intro videos (~940MB)" \
-            "Back" "Return to main menu" 2>/dev/null)
+            "Back" "Return to main menu" \
+            --cancel-label="Back" 2>/dev/null)
         
         case "$choice" in
             "Configure SAH Delays")
@@ -1518,6 +1626,9 @@ advanced_tools() {
             "Create Desktop Shortcut")
                 create_desktop_shortcut
                 ;;
+            "Install GUI Launcher")
+                create_gui_launcher
+                ;;
             "Remove SCUM Videos")
                 remove_scum_videos
                 ;;
@@ -1539,13 +1650,14 @@ system_maintenance() {
         
         local choice
         choice=$(zenity --list --title="System & Maintenance" \
-            --width=550 --height=350 \
+            --width=550 --height=340 \
             --text="<b>Backup, Logs, and Troubleshooting</b>\n\nBackups available: $backup_count" \
             --column="Tool" --column="Description" \
             "Backup Management" "Create/restore SAH backups" \
             "View Logs" "Check error logs" \
             "Troubleshooting" "Common issues & fixes" \
-            "Back" "Return to main menu" 2>/dev/null)
+            "Back" "Return to main menu" \
+            --cancel-label="Back" 2>/dev/null)
         
         case "$choice" in
             "Backup Management")
@@ -1569,14 +1681,9 @@ system_maintenance() {
 # Main menu loop
 main_menu() {
     while true; do
-        # Show loading before checking status
-        show_working "Loading" "Checking system status..."
-        
-        # Get current status (quiet mode for main menu)
+        # Get current status (quiet mode for main menu) - no progress dialog to avoid zenity conflicts
         check_installation_status 1 > /dev/null
         local is_installed=$?
-        
-        close_working
         
         if [ $is_installed -eq 0 ]; then
             status_summary="✓ Installation Complete"
@@ -1605,7 +1712,11 @@ main_menu() {
             "Status" "View detailed status" \
             "Advanced Tools" "Shortcuts, dialogs, optimization" \
             "System & Maintenance" "Backups, logs, troubleshooting" \
-            "Quit" "Exit" 2>/dev/null)
+            "Quit" "Exit" \
+            --cancel-label="Quit" 2>/dev/null) || true
+        choice="${choice//[$'\r\n']}"
+        choice="${choice#"${choice%%[![:space:]]*}"}"
+        choice="${choice%"${choice##*[![:space:]]}"}"
         
         # Ensure any lingering loading indicators are closed
         close_working 2>/dev/null
@@ -1651,16 +1762,16 @@ main_menu() {
                 log "User quit GUI"
                 exit 0
                 ;;
+            *)
+                log "Unexpected menu value: '$choice'"
+                exit 1
+                ;;
         esac
     done
 }
 
-# Show initial loading screen
-show_working "SCUM Admin Helper" "Initializing GUI..."
-
-# Show welcome screen on first run
+# Show welcome screen on first run (no initial progress dialog - avoids zenity conflicts)
 if ! check_installation_status 1 > /dev/null 2>&1; then
-    close_working
     zenity --info --title="Welcome to SCUM Admin Helper Manager" --width=500 --text="<b>Welcome!</b>
 
 This tool helps you install and manage SCUM Admin Helper on Linux.
@@ -1677,10 +1788,6 @@ This tool helps you install and manage SCUM Admin Helper on Linux.
 • Provides tools for testing and troubleshooting
 
 Ready to begin?" 2>/dev/null
-else
-    # Close the loading screen after a brief moment
-    sleep 0.5
-    close_working
 fi
 
 # Start main menu
